@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HUMA BANK — Admin Cafétéria</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+:root{
+  --navy-950:#040B18; --navy-900:#081831; --navy-800:#0C2350; --navy-700:#153274; --navy-600:#2748A0; --navy-500:#3E5FC4;
+  --navy-100:#E8EDF8; --navy-50:#F3F6FC; --white:#FFFFFF; --surface:#FFFFFF; --ink:#0A1B3D; --muted:#647096; --muted-2:#8792B0;
+  --line:#E2E8F5; --pos:#1B8F5A; --pos-bg:#E7F6EE; --neg:#C4433F; --neg-bg:#FBEAEA; --warn:#A9761B; --warn-bg:#FDF3DC;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;height:100%;}
+body{font-family:'Inter',sans-serif;background:var(--navy-50);color:var(--ink);}
+h1,h2,h3,.display{font-family:'Manrope',sans-serif;}
+.tnum{font-variant-numeric:tabular-nums;}
+button{font-family:inherit;cursor:pointer;}
+.cur{height:0.85em;width:auto;vertical-align:-0.12em;filter:brightness(0);margin-right:2px;}
+
+/* ---------- LOGIN GATE ---------- */
+#gate{position:fixed;inset:0;background:radial-gradient(120% 100% at 50% 0%,var(--navy-700) 0%,var(--navy-900) 55%,var(--navy-950) 100%);display:flex;align-items:center;justify-content:center;z-index:999;}
+.gate-card{width:380px;max-width:90vw;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);border-radius:22px;padding:36px 30px;color:#fff;}
+.gate-card .mark{width:44px;height:44px;border-radius:12px;background:#fff;color:var(--navy-900);display:flex;align-items:center;justify-content:center;font-family:'Manrope';font-weight:800;font-size:18px;margin-bottom:14px;}
+.gate-card h1{font-size:19px;margin:0 0 4px;}
+.gate-card p{color:#A9B8E4;font-size:12.5px;margin:0 0 22px;}
+.gate-card input{width:100%;padding:13px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.07);color:#fff;font-size:14px;margin-bottom:12px;outline:none;}
+.gate-card button{width:100%;padding:13px;border-radius:12px;border:none;background:#fff;color:var(--navy-900);font-weight:700;font-size:13.5px;}
+.gate-hint{margin-top:16px;font-size:11px;color:#8CA0DE;line-height:1.7;}
+.gate-err{color:#F3A6A6;font-size:12px;margin:-6px 0 10px;}
+
+/* ---------- SHELL ---------- */
+.shell{display:flex;min-height:100vh;}
+.sidebar{
+  width:250px;flex-shrink:0;background:linear-gradient(180deg,var(--navy-950),var(--navy-800));color:#fff;
+  display:flex;flex-direction:column;position:sticky;top:0;height:100vh;padding:20px 14px;
+}
+.sb-brand{display:flex;align-items:center;gap:10px;padding:6px 8px 10px;}
+.sb-brand .mark{width:34px;height:34px;border-radius:10px;background:#fff;color:var(--navy-900);display:flex;align-items:center;justify-content:center;font-family:'Manrope';font-weight:800;font-size:15px;flex-shrink:0;}
+.sb-brand .txt b{display:block;font-family:'Manrope';font-weight:800;font-size:14.5px;}
+.sb-brand .txt span{display:block;font-size:10.5px;color:#96A8DC;}
+.sb-school{margin:6px 8px 18px;font-size:11px;color:#7C8BC0;border-top:1px solid rgba(255,255,255,.1);padding-top:12px;}
+.sb-nav{flex:1;display:flex;flex-direction:column;gap:2px;overflow-y:auto;}
+.sb-link{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:11px;background:none;border:none;color:#B9C6EE;font-size:13px;font-weight:600;text-align:left;width:100%;}
+.sb-link:hover{background:rgba(255,255,255,.06);}
+.sb-link.active{background:rgba(255,255,255,.12);color:#fff;}
+.sb-link .badge-mini{margin-left:auto;background:var(--neg);color:#fff;font-size:9.5px;font-weight:800;padding:1px 6px;border-radius:10px;}
+.sb-logout{margin-top:10px;padding-top:12px;border-top:1px solid rgba(255,255,255,.1);}
+
+.main{flex:1;min-width:0;display:flex;flex-direction:column;}
+.topbar{position:sticky;top:0;z-index:15;background:var(--surface);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:14px;padding:14px 28px;}
+.search-wrap{flex:1;max-width:420px;display:flex;align-items:center;gap:9px;background:var(--navy-50);border:1px solid var(--line);border-radius:12px;padding:10px 14px;color:var(--muted);}
+.search-wrap input{border:none;background:none;outline:none;flex:1;font-size:13px;color:var(--ink);font-family:inherit;}
+.top-actions{display:flex;align-items:center;gap:10px;margin-left:auto;}
+.icon-btn{width:38px;height:38px;border-radius:50%;border:1px solid var(--line);background:var(--surface);display:flex;align-items:center;justify-content:center;color:var(--ink);position:relative;}
+.icon-btn .dot{position:absolute;top:7px;right:8px;width:7px;height:7px;border-radius:50%;background:var(--neg);border:1.5px solid var(--surface);}
+.top-profile{display:flex;align-items:center;gap:9px;padding:6px 12px 6px 6px;border:1px solid var(--line);border-radius:30px;}
+.top-profile .av{width:30px;height:30px;border-radius:50%;background:var(--navy-800);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;font-family:'Manrope';}
+.top-profile b{font-size:12.5px;}
+.top-profile small{display:block;color:var(--muted);font-size:10.5px;}
+
+.content{padding:26px 28px 60px;max-width:1400px;}
+.page-title{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;}
+.page-title h1{font-size:22px;margin:0;}
+.page-title p{color:var(--muted);font-size:12.5px;margin:3px 0 0;}
+
+/* ---------- COMPONENTS (reused patterns) ---------- */
+.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:22px;}
+.kpi-card{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:18px 20px;min-width:0;overflow:hidden;}
+.kpi-card .kl{font-size:12px;color:var(--muted);margin:0 0 8px;display:flex;align-items:center;gap:8px;}
+.kpi-card .kv{font-family:'Manrope';font-weight:800;font-size:24px;margin:0;}
+.kpi-card .kd{font-size:11px;margin-top:6px;font-weight:700;}
+.kicon{width:34px;height:34px;border-radius:10px;background:var(--navy-100);color:var(--navy-700);display:flex;align-items:center;justify-content:center;}
+
+.grid-2{display:grid;grid-template-columns:1.6fr 1fr;gap:16px;margin-bottom:22px;}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:20px;min-width:0;overflow:hidden;}
+.card canvas{max-width:100%;display:block;}
+.card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+.card-head h3{font-size:14.5px;margin:0;}
+.filter-pills{display:flex;gap:6px;flex-wrap:wrap;}
+.pill{border:1px solid var(--line);background:var(--navy-50);border-radius:20px;padding:6px 13px;font-size:11.5px;font-weight:700;color:var(--muted);}
+.pill.active{background:var(--navy-800);color:#fff;border-color:var(--navy-800);}
+
+.table{width:100%;border-collapse:collapse;}
+.table th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted-2);padding:0 12px 10px;font-weight:700;}
+.table td{padding:12px;border-top:1px solid var(--line);font-size:12.5px;}
+.table tr:hover td{background:var(--navy-50);cursor:pointer;}
+.name-cell{display:flex;align-items:center;gap:10px;}
+.av-sm{width:32px;height:32px;border-radius:50%;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;font-family:'Manrope';flex-shrink:0;}
+.badge{font-size:10px;font-weight:700;padding:4px 10px;border-radius:20px;white-space:nowrap;display:inline-block;}
+.badge.ok{background:var(--pos-bg);color:var(--pos);}
+.badge.pending{background:var(--warn-bg);color:var(--warn);}
+.badge.fail{background:var(--neg-bg);color:var(--neg);}
+.badge.mut{background:var(--navy-100);color:var(--muted);}
+.trow{display:flex;align-items:center;gap:12px;padding:12px 10px;border-bottom:1px solid var(--line);cursor:pointer;border-radius:10px;}
+.trow:hover{background:var(--navy-50);}
+.trow:last-child{border-bottom:none;}
+.tleft{flex:1;min-width:0;}
+.tleft b{font-size:13px;display:block;}
+.tleft small{color:var(--muted);font-size:11.5px;}
+.tx-icn-lite{width:36px;height:36px;border-radius:10px;background:var(--navy-100);color:var(--navy-700);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.cur-badge-lg{width:52px;height:52px;border-radius:50%;background:var(--navy-100);color:var(--navy-700);display:flex;align-items:center;justify-content:center;margin:0 auto;}
+
+.subnav{display:flex;gap:6px;margin-bottom:18px;border-bottom:1px solid var(--line);}
+.subnav button{background:none;border:none;padding:10px 4px;margin-right:18px;font-size:13px;font-weight:700;color:var(--muted);border-bottom:2px solid transparent;}
+.subnav button.active{color:var(--navy-800);border-color:var(--navy-800);}
+
+.btn{border:none;border-radius:10px;padding:9px 15px;font-size:12px;font-weight:700;}
+.btn.primary{background:var(--navy-800);color:#fff;}
+.btn.ghost{background:var(--navy-50);color:var(--ink);border:1px solid var(--line);}
+.btn.danger{background:var(--neg-bg);color:var(--neg);}
+.btn.ok{background:var(--pos-bg);color:var(--pos);}
+
+.empty{text-align:center;padding:40px 20px;color:var(--muted);font-size:13px;}
+
+/* modal */
+.modal-bg{position:fixed;inset:0;background:rgba(4,11,24,.5);z-index:200;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .18s;}
+.modal-bg.open{opacity:1;pointer-events:auto;}
+.modal-box{background:var(--surface);border-radius:20px;width:460px;max-width:92vw;max-height:86vh;overflow-y:auto;padding:24px;transform:scale(.96);transition:transform .18s;}
+.modal-bg.open .modal-box{transform:scale(1);}
+.modal-box h3{margin:0 0 14px;font-size:16px;}
+.field{margin-bottom:13px;}
+.field label{display:block;font-size:11.5px;font-weight:700;color:var(--muted);margin-bottom:6px;}
+.field input,.field select{width:100%;border:1px solid var(--line);border-radius:10px;padding:11px 12px;font-size:13px;font-family:inherit;outline:none;}
+.summary-row{display:flex;justify-content:space-between;padding:8px 0;font-size:12.5px;border-top:1px solid var(--line);}
+.summary-row:first-child{border-top:none;}
+.close-x{position:absolute;top:18px;right:18px;width:30px;height:30px;border-radius:50%;border:1px solid var(--line);background:var(--surface);display:flex;align-items:center;justify-content:center;}
+
+.toast{position:fixed;left:50%;bottom:30px;transform:translateX(-50%);background:var(--navy-900);color:#fff;padding:12px 20px;border-radius:30px;font-size:12.5px;font-weight:600;z-index:300;opacity:0;transition:opacity .25s;pointer-events:none;}
+.toast.show{opacity:1;}
+
+.toggle{width:40px;height:23px;border-radius:20px;background:var(--line);position:relative;border:none;flex-shrink:0;}
+.toggle.on{background:var(--navy-700);}
+.toggle::after{content:'';position:absolute;width:18px;height:18px;background:#fff;border-radius:50%;top:2.5px;left:3px;transition:.15s;}
+.toggle.on::after{left:19px;}
+.settings-row{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-top:1px solid var(--line);}
+.settings-row:first-child{border-top:none;}
+.settings-row .st{font-size:13px;font-weight:600;}
+.settings-row small{display:block;color:var(--muted);font-weight:400;font-size:11px;margin-top:2px;}
+
+@media (max-width:980px){
+  .sidebar{width:76px;}
+  .sb-brand .txt,.sb-school,.sb-link span{display:none;}
+  .sb-link{justify-content:center;}
+  .kpi-row{grid-template-columns:repeat(2,1fr);}
+  .grid-2{grid-template-columns:1fr;}
+}
+</style>
+</head>
+<body>
+<div id="gate">
+  <div class="gate-card">
+    <div class="mark">🍽</div>
+    <h1>Cafétéria — Administration</h1>
+    <p>Gestion du menu, du stock et des commandes</p>
+    <input id="gate-pass" type="password" placeholder="Mot de passe administrateur">
+    <div id="gate-err" class="gate-err" style="display:none;">Mot de passe incorrect.</div>
+    <button onclick="gateLogin()">Accéder au dashboard</button>
+    <div class="gate-hint">Démo : mot de passe <b>admin123</b><br>Ce dashboard est un prototype autonome. Les commandes payées depuis "index" transitent par School Bank — la cafétéria ne reçoit que les infos nécessaires à la préparation.</div>
+  </div>
+</div>
+<div id="app"></div>
+<div id="modal-root"></div>
+<div id="toast" class="toast"></div>
+
+<script>
+/* ============================================================
+   ICONS
+============================================================ */
+const ICONS = {
+  home:'<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9.5a1 1 0 0 0 1 1H9a1 1 0 0 0 1-1V15h4v4.5a1 1 0 0 0 1 1h2.5a1 1 0 0 0 1-1V10"/>',
+  users:'<circle cx="8.5" cy="8" r="3"/><path d="M2.5 20.5c0-3.6 2.8-6 6-6s6 2.4 6 6"/><circle cx="16.5" cy="8" r="2.8"/><path d="M14.5 3.7a2.8 2.8 0 0 1 0 8.6"/><path d="M15 14.7c2.4.4 4.5 2.5 4.5 5.8"/>',
+  bank:'<rect x="4.5" y="3" width="15" height="18" rx="1.5"/><path d="M9.5 21v-4.5h5V21"/><path d="M8 7.5h1.2M14.8 7.5H16M8 11.5h1.2M14.8 11.5H16"/>',
+  card:'<rect x="2.5" y="5.5" width="19" height="13" rx="3"/><path d="M2.5 10h19"/><path d="M6 14.5h4"/>',
+  trend:'<path d="M3 17 9 10l4 3 8-9"/><path d="M15 3.5h6V9.5"/>',
+  food:'<path d="M5 3v7a2.4 2.4 0 0 0 2.4 2.4V21"/><path d="M8.7 3v6.4"/><path d="M15 3c-1.8 0-3 2.2-3 5s1.2 4.6 3 4.6V21"/>',
+  chart:'<path d="M4 20V4"/><path d="M4 20h16"/><path d="M8 16l3.5-5 3 3L19 8"/>',
+  shield:'<path d="M12 2.5 20 6v6c0 5.2-3.6 8.9-8 10.5-4.4-1.6-8-5.3-8-10.5V6l8-3.5Z"/><path d="m9 12 2 2 4-4.2"/>',
+  bell:'<path d="M6.5 8.5a5.5 5.5 0 0 1 11 0c0 5 2 6.3 2 6.3H4.5s2-1.3 2-6.3Z"/><path d="M10 18a2 2 0 0 0 4 0"/>',
+  gear:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2.1 2.1 0 1 1-3 3l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21a2.1 2.1 0 1 1-4.2 0v-.1a1.7 1.7 0 0 0-1.1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2.1 2.1 0 1 1-3-3l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H3a2.1 2.1 0 1 1 0-4.2h.1A1.7 1.7 0 0 0 4.7 9a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2.1 2.1 0 1 1 3-3l.1.1a1.7 1.7 0 0 0 1.9.3H9.4A1.7 1.7 0 0 0 10.4 3V3a2.1 2.1 0 1 1 4.2 0v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1a2.1 2.1 0 1 1 3 3l-.1.1a1.7 1.7 0 0 0-.3 1.9V9.4a1.7 1.7 0 0 0 1.6 1H21a2.1 2.1 0 1 1 0 4.2h-.1a1.7 1.7 0 0 0-1.5 1Z"/>',
+  logout:'<path d="M9.5 20.5H6a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2h3.5"/><path d="M16.5 16.5 21 12l-4.5-4.5"/><path d="M21 12H9.5"/>',
+  search:'<circle cx="11" cy="11" r="7.5"/><path d="m21 21-4.3-4.3"/>',
+  alert:'<path d="M12 9v4.2"/><circle cx="12" cy="16.5" r=".6" fill="currentColor" stroke="none"/><path d="M10.6 3.5 1.9 18.2A1.9 1.9 0 0 0 3.6 21h16.8a1.9 1.9 0 0 0 1.7-2.8L13.4 3.5a1.9 1.9 0 0 0-2.8 0Z"/>',
+  lock:'<rect x="4.5" y="11" width="15" height="9.5" rx="2.2"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11"/>',
+  check:'<path d="M20 6 9 17l-5-5"/>',
+  x:'<path d="M18 6 6 18M6 6l12 12"/>',
+  wallet:'<path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h11A2.5 2.5 0 0 1 19 7.5V8H5.5A2.5 2.5 0 0 1 3 5.5"/><path d="M3 8v9a2.5 2.5 0 0 0 2.5 2.5H19A2 2 0 0 0 21 17.5v-7A2 2 0 0 0 19 8.5H5"/><circle cx="16.2" cy="13.5" r="1.3"/>',
+  box:'<path d="M3.5 8 12 3.5 20.5 8 12 12.5 3.5 8Z"/><path d="M3.5 8v9L12 21.5 20.5 17V8"/><path d="M12 12.5V21.5"/>',
+  cart:'<circle cx="9" cy="20" r="1.4"/><circle cx="17.5" cy="20" r="1.4"/><path d="M2.5 3.5h2.3L7.2 15h11.4l2.4-8.5H5.6"/>',
+  tag:'<path d="M11.5 3.5H4.5a1 1 0 0 0-1 1v7l10.5 10.5a1 1 0 0 0 1.4 0l7.1-7.1a1 1 0 0 0 0-1.4L11.5 3.5Z"/><circle cx="8" cy="8" r="1.4"/>',
+  receipt:'<path d="M6 3.5h12v17l-2.5-1.6L13 20.5l-2.5-1.6L8 20.5l-2-1.6V3.5Z"/><path d="M9 8h6M9 12h6M9 16h3"/>',
+};
+function icon(name,size=18,sw=1.8){return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]||''}</svg>`;}
+const CUR = `<img class="cur" src="data:image/png;base64,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">`;
+function money(n){ const neg=n<0; return `${neg?'-':''}${CUR}${Math.abs(n).toFixed(2)}`; }
+function fmt(n){ return (n<0?'-':'')+'$'+Math.abs(n).toFixed(2); }
+function genId(p){ return p+'-'+String(Math.floor(100000+Math.random()*899999)); }
+function toast(msg){ const t=document.getElementById('toast'); t.innerHTML=icon('check',15)+`<span style="margin-left:6px;">${msg}</span>`; t.classList.add('show'); clearTimeout(window._t); window._t=setTimeout(()=>t.classList.remove('show'),2400); }
+function maskNumber(n){ return n.slice(0,2)+'••'+n.slice(4); }
+
+/* ============================================================
+   DATA — same shape as the "index" app (prototype seed)
+   NOTE: this file is standalone. Live sync with "index" needs a
+   shared backend/API; here both are pre-seeded identically so the
+   demo looks connected.
+============================================================ */
+const AV_PALETTE=['#2748A0','#8B5FBF','#1B8F5A','#C4433F','#B8860B','#0C7C8C'];
+function colorFor(n){ let s=0; for(const c of n) s+=c.charCodeAt(0); return AV_PALETTE[s%AV_PALETTE.length]; }
+function roleLabel(r){ return {eleve:'Élève',parent:'Parent',professeur:'Professeur',personnel:'Personnel',direction:'Direction'}[r]||r; }
+/* ============================================================
+   DONNÉES — Cafétéria (prototype autonome, connecté conceptuellement
+   à "index" et School Bank : les commandes payées depuis l'app y
+   transitent, la cafétéria ne reçoit que les infos de préparation)
+============================================================ */
+const CATEGORIES = ['Plats','Snacks','Boissons','Desserts','Fruits','Combos'];
+const CLIENT_TYPES = ['Élève','Parent','Professeur','Personnel'];
+
+/* ============================================================
+   SUPABASE — même projet et mêmes tables que index et admin-dashboard
+============================================================ */
+const SUPABASE_URL = 'https://nkwcletysxetciggjkgv.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5rd2NsZXR5c3hldGNpZ2dqa2d2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcwMTg2MDMsImV4cCI6MjEwMjU5NDYwM30.4-lTfCnlcTu-Pu5Irmn7zRrn029oq3fex_xMfHIbWSw';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let PRODUCTS = [];
+let STOCK_MOVEMENTS = [];
+let ORDERS = [];
+function stockStatus(p){ if(p.stock<=0) return 'rupture'; if(p.stock<=p.threshold) return 'faible'; return 'ok'; }
+
+const ORDER_STATUSES = ['En attente','Payée','En préparation','Prête','Servie','Annulée'];
+function nextStatus(s){ const i=ORDER_STATUSES.indexOf(s); return i>=0 && i<4 ? ORDER_STATUSES[i+1] : s; }
+const CLASSES = ['7e Année Fondamentale','8e Année Fondamentale','9e Année Fondamentale','Secondaire I (NS1)','Secondaire II (NS2)','Secondaire III (NS3)','Secondaire IV — Philo'];
+
+async function loadFromSupabase(){
+  const [prodRes, orderRes, moveRes, setRes] = await Promise.all([
+    sb.from('cafeteria_products').select('*').order('name'),
+    sb.from('cafeteria_orders').select('*').order('created_at',{ascending:false}),
+    sb.from('stock_movements').select('*').order('created_at',{ascending:false}),
+    sb.from('app_settings').select('*').eq('key','cafeteria').maybeSingle(),
+  ]);
+  PRODUCTS = (prodRes.data||[]).map(p=>({id:p.id, name:p.name, emoji:p.emoji, category:p.category, price:Number(p.price), stock:p.stock, threshold:p.threshold, status:p.status, updated:new Date(p.updated_at)}));
+  ORDERS = (orderRes.data||[]).map(o=>({id:o.id, txId:o.tx_id, accountNumber:o.account_number, client:o.client_name, type:o.client_type, classe:o.classe, items:o.items||[], total:Number(o.total), payment:o.payment, status:o.status, date:new Date(o.created_at)}));
+  STOCK_MOVEMENTS = (moveRes.data||[]).map(m=>({product:m.product_name, type:m.type, qty:m.qty, date:new Date(m.created_at), supplier:m.supplier, note:m.note}));
+  if(setRes.data && setRes.data.value){ Object.assign(SETTINGS, setRes.data.value); }
+}
+async function syncAll(){ await loadFromSupabase(); if(document.getElementById('gate').style.display==='none') renderPage(); }
+function startRealtime(){
+  sb.channel('cafeteria-sync')
+    .on('postgres_changes', {event:'*', schema:'public', table:'cafeteria_products'}, syncAll)
+    .on('postgres_changes', {event:'*', schema:'public', table:'cafeteria_orders'}, syncAll)
+    .on('postgres_changes', {event:'*', schema:'public', table:'stock_movements'}, syncAll)
+    .subscribe();
+}
+
+const readStockAlerts = new Set();
+function stockNotifications(){
+  return PRODUCTS.filter(p=>stockStatus(p)!=='ok').map(p=>{
+    const rupture = stockStatus(p)==='rupture';
+    return {
+      id:'stock-'+p.id,
+      text: rupture ? `Produit en rupture : ${p.name}.` : `Stock faible : ${p.name} (${p.stock} restants).`,
+      date: p.updated,
+      read: readStockAlerts.has(p.id),
+      productId: p.id,
+    };
+  }).sort((a,b)=>b.date-a.date);
+}
+
+const SETTINGS = {
+  nom:"Cafétéria — Grand Collège l'Humanisme", horaires:'7h00 – 15h00', jours:'Lundi à Vendredi',
+  prepTime:15, methods:{schoolbank:true, carte:true, solde:true},
+  notifPush:true, notifStock:true,
+};
+
+/* ============================================================
+   STATE
+============================================================ */
+const state = { page:'dashboard', financeSeries:[20,24,19,28,22,30,26,32,29,35], displaySeries:[20,24,19,28,22,30,26,32,29,35] };
+let ticker = null;
+
+/* ============================================================
+   GATE
+============================================================ */
+async function gateLogin(){
+  const v = document.getElementById('gate-pass').value;
+  if(v!=='admin123'){ document.getElementById('gate-err').style.display='block'; return; }
+  document.getElementById('gate').style.display='none';
+  document.getElementById('app').innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100vh;color:var(--muted);">Chargement des données…</div>`;
+  try{ await loadFromSupabase(); }catch(e){ console.error('Supabase load failed',e); }
+  renderApp();
+  startRealtime();
+}
+
+/* ============================================================
+   SHELL
+============================================================ */
+const NAV = [
+  ['dashboard','home','Dashboard'],
+  ['menu','food','Menu'],
+  ['stock','box','Stock'],
+  ['commandes','cart','Commandes'],
+  ['paiements','receipt','Paiements'],
+  ['analytics','chart','Analytics'],
+  ['notifications','bell','Notifications'],
+  ['parametres','gear','Paramètres'],
+];
+function unreadCount(){ return stockNotifications().filter(n=>!n.read).length; }
+function lowStockCount(){ return PRODUCTS.filter(p=>stockStatus(p)!=='ok').length; }
+
+function renderApp(){
+  const root = document.getElementById('app');
+  root.innerHTML = `
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="sb-brand"><div class="mark">🍽</div><div class="txt"><b>Cafétéria</b><span>Administration</span></div></div>
+      <div class="sb-school">Grand Collège l'Humanisme<br>Connecté à HUMA BANK / index</div>
+      <nav class="sb-nav">
+        ${NAV.map(([id,ic,label])=>`
+          <button class="sb-link ${state.page===id?'active':''}" onclick="go('${id}')">
+            ${icon(ic,18)}<span>${label}</span>
+            ${id==='notifications'&&unreadCount()?`<span class="badge-mini">${unreadCount()}</span>`:''}
+            ${id==='stock'&&lowStockCount()?`<span class="badge-mini">${lowStockCount()}</span>`:''}
+          </button>`).join('')}
+      </nav>
+      <div class="sb-logout"><button class="sb-link" onclick="location.reload()">${icon('logout',18)}<span>Déconnexion</span></button></div>
+    </aside>
+    <div class="main">
+      <div class="topbar">
+        <div class="search-wrap">${icon('search',16)}<input id="global-search" placeholder="Rechercher un produit ou une commande… (Entrée)" onkeydown="if(event.key==='Enter')globalSearch(this.value)"></div>
+        <div class="top-actions">
+          <button class="icon-btn" onclick="go('notifications')">${icon('bell',17)}${unreadCount()?'<span class="dot"></span>':''}</button>
+          <div class="top-profile"><div class="av">NP</div><div><b>Nadège Pierre</b><small>Cafétéria Manager</small></div></div>
+        </div>
+      </div>
+      <div class="content" id="content"></div>
+    </div>
+  </div>`;
+  renderPage();
+}
+function go(page){ state.page=page; renderApp(); }
+function renderPage(){
+  const c = document.getElementById('content');
+  const pages = {dashboard:pgDashboard,menu:pgMenu,stock:pgStock,commandes:pgCommandes,paiements:pgPaiements,analytics:pgAnalytics,notifications:pgNotifications,parametres:pgParametres};
+  c.innerHTML = (pages[state.page]||pgDashboard)();
+  requestAnimationFrame(()=>{ drawCharts(); ensureTicker(); });
+}
+function globalSearch(q){
+  q=q.trim().toLowerCase();
+  if(q.length<2){ toast('Tapez au moins 2 caractères'); return; }
+  if(PRODUCTS.some(p=>p.name.toLowerCase().includes(q))){ go('menu'); return; }
+  if(ORDERS.some(o=>o.id.toLowerCase().includes(q)||o.client.toLowerCase().includes(q))){ go('commandes'); return; }
+  toast('Aucun résultat');
+}
+
+/* ============================================================
+   DASHBOARD
+============================================================ */
+function pgDashboard(){
+  const today = new Date().toDateString();
+  const todayOrders = ORDERS.filter(o=>o.date.toDateString()===today && o.status!=='Annulée');
+  const salesToday = todayOrders.reduce((s,o)=>s+o.total,0);
+  const itemsSold = ORDERS.filter(o=>o.status!=='Annulée').flatMap(o=>o.items).reduce((s,i)=>s+i.qty,0);
+  const popularity = {};
+  ORDERS.filter(o=>o.status!=='Annulée').flatMap(o=>o.items).forEach(i=>{ popularity[i.name]=(popularity[i.name]||0)+i.qty; });
+  const popular = Object.entries(popularity).sort((a,b)=>b[1]-a[1]);
+  const medals=['🥇','🥈','🥉'];
+  return `
+  <div class="page-title"><div><h1>Vue d'ensemble</h1><p>Activité de la cafétéria — ${SETTINGS.nom}</p></div></div>
+  <div class="kpi-row">
+    <div class="kpi-card"><p class="kl"><span class="kicon">${icon('wallet',16)}</span>Ventes aujourd'hui</p><p class="kv tnum">${money(salesToday)}</p></div>
+    <div class="kpi-card"><p class="kl"><span class="kicon">${icon('cart',16)}</span>Commandes aujourd'hui</p><p class="kv">${todayOrders.length}</p></div>
+    <div class="kpi-card"><p class="kl"><span class="kicon">${icon('food',16)}</span>Produits vendus</p><p class="kv">${itemsSold}</p></div>
+    <div class="kpi-card"><p class="kl"><span class="kicon">${icon('box',16)}</span>Stock faible</p><p class="kv" style="color:${lowStockCount()?'var(--neg)':'inherit'}">${lowStockCount()}</p></div>
+  </div>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-head"><h3>Ventes <span style="color:var(--pos);font-size:11px;font-weight:600;">● en direct</span></h3>
+        <div class="filter-pills">${["Aujourd'hui",'7j','30j','3 mois'].map((p,i)=>`<div class="pill ${i===0?'active':''}">${p}</div>`).join('')}</div>
+      </div>
+      <canvas id="sales-chart" height="150"></canvas>
+    </div>
+    <div class="card">
+      <div class="card-head"><h3>Produits populaires</h3></div>
+      ${popular.map(([name,qty],i)=>`
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 0;font-size:13px;">
+          <span style="width:22px;">${medals[i]||(i+1)+'.'}</span><b style="flex:1;">${name}</b><span style="color:var(--muted);">${qty} vendus</span>
+        </div>`).join('') || `<div class="empty">Aucune donnée</div>`}
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h3>Commandes récentes</h3><button class="btn ghost" onclick="go('commandes')">Voir tout</button></div>
+    <table class="table"><thead><tr><th>ID</th><th>Client</th><th>Montant</th><th>Heure</th><th>Statut</th></tr></thead>
+    <tbody>${ORDERS.slice().sort((a,b)=>b.date-a.date).slice(0,5).map(o=>`
+      <tr onclick="openOrderDetail('${o.id}')"><td>${o.id}</td><td>${o.client}</td><td class="tnum">${money(o.total)}</td><td>${o.date.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}</td><td>${statusBadge(o.status)}</td></tr>
+    `).join('')}</tbody></table>
+  </div>`;
+}
+function statusBadge(s){
+  const map={'En attente':'pending','Payée':'ok','En préparation':'pending','Prête':'ok','Servie':'mut','Annulée':'fail'};
+  return `<span class="badge ${map[s]||'mut'}">${s}</span>`;
+}
+
+/* ============================================================
+   MENU
+============================================================ */
+let menuFilter='Tous';
+function pgMenu(){
+  const filters=['Tous',...CATEGORIES];
+  let list = PRODUCTS;
+  if(menuFilter!=='Tous') list = list.filter(p=>p.category===menuFilter);
+  return `
+  <div class="page-title"><div><h1>Menu</h1><p>${PRODUCTS.length} produits au catalogue</p></div><button class="btn primary" onclick="openProductForm()">+ Ajouter un produit</button></div>
+  <div class="subnav">${filters.map(f=>`<button class="${menuFilter===f?'active':''}" onclick="menuFilter='${f}';renderPage()">${f}</button>`).join('')}</div>
+  <div class="card">
+    <table class="table"><thead><tr><th>Produit</th><th>Catégorie</th><th>Prix</th><th>Stock</th><th>Statut</th><th>Actions</th></tr></thead>
+    <tbody>${list.map(p=>`
+      <tr>
+        <td><div class="name-cell"><span style="font-size:20px;">${p.emoji}</span><b>${p.name}</b></div></td>
+        <td>${p.category}</td>
+        <td class="tnum">${money(p.price)}</td>
+        <td>${p.stock}</td>
+        <td>${p.status==='disponible'?`<span class="badge ok">Disponible</span>`:`<span class="badge fail">Indisponible</span>`}</td>
+        <td><div style="display:flex;gap:6px;">
+          <button class="btn ghost" onclick="openProductForm('${p.id}')">Modifier</button>
+          <button class="btn ${p.status==='disponible'?'danger':'ok'}" onclick="toggleProductStatus('${p.id}')">${p.status==='disponible'?'Désactiver':'Activer'}</button>
+          <button class="btn danger" onclick="deleteProduct('${p.id}')">✕</button>
+        </div></td>
+      </tr>`).join('') || `<tr><td colspan="6"><div class="empty">Aucun produit dans cette catégorie</div></td></tr>`}
+    </tbody></table>
+  </div>`;
+}
+function toggleProductStatus(id){ const p=PRODUCTS.find(x=>x.id===id); p.status = p.status==='disponible'?'indisponible':'disponible'; sb.from('cafeteria_products').update({status:p.status}).eq('id',id); renderPage(); toast('Statut mis à jour'); }
+function deleteProduct(id){ if(!confirm('Supprimer ce produit ?')) return; PRODUCTS = PRODUCTS.filter(p=>p.id!==id); sb.from('cafeteria_products').delete().eq('id',id); renderPage(); toast('Produit supprimé'); }
+function openProductForm(id){
+  const p = id ? PRODUCTS.find(x=>x.id===id) : null;
+  openModal(`
+    <button class="close-x" onclick="closeModal()">${icon('x',14)}</button>
+    <h3>${p?'Modifier le produit':'Ajouter un produit'}</h3>
+    <div class="field"><label>Nom</label><input id="pf-name" value="${p?p.name:''}" placeholder="Ex. Burger"></div>
+    <div class="field"><label>Emoji / photo</label><input id="pf-emoji" value="${p?p.emoji:'🍽'}" maxlength="2"></div>
+    <div class="field"><label>Catégorie</label><select id="pf-cat">${CATEGORIES.map(c=>`<option ${p&&p.category===c?'selected':''}>${c}</option>`).join('')}</select></div>
+    <div class="field"><label>Prix</label><input id="pf-price" type="number" value="${p?p.price:''}" placeholder="0"></div>
+    <div class="field"><label>Stock initial</label><input id="pf-stock" type="number" value="${p?p.stock:''}" placeholder="0"></div>
+    <div class="field"><label>Seuil d'alerte</label><input id="pf-threshold" type="number" value="${p?p.threshold:10}" placeholder="10"></div>
+    <button class="btn primary" style="width:100%;" onclick="saveProduct(${p?`'${p.id}'`:'null'})">${p?'Enregistrer':'Ajouter le produit'}</button>
+  `);
+}
+async function saveProduct(id){
+  const name=document.getElementById('pf-name').value.trim();
+  const emoji=document.getElementById('pf-emoji').value.trim()||'🍽';
+  const category=document.getElementById('pf-cat').value;
+  const price=parseFloat(document.getElementById('pf-price').value)||0;
+  const stock=parseInt(document.getElementById('pf-stock').value)||0;
+  const threshold=parseInt(document.getElementById('pf-threshold').value)||10;
+  if(!name){ toast('Nom requis'); return; }
+  if(id){
+    const p=PRODUCTS.find(x=>x.id===id);
+    Object.assign(p,{name,emoji,category,price,stock,threshold,updated:new Date()});
+    await sb.from('cafeteria_products').update({name,emoji,category,price,stock,threshold}).eq('id',id);
+  } else {
+    const newId = genId('P');
+    PRODUCTS.push({id:newId,name,emoji,category,price,stock,threshold,status:'disponible',updated:new Date()});
+    await sb.from('cafeteria_products').insert({id:newId,name,emoji,category,price,stock,threshold,status:'disponible'});
+  }
+  closeModal(); renderPage(); toast('Produit enregistré');
+}
+
+/* ============================================================
+   STOCK
+============================================================ */
+function pgStock(){
+  return `
+  <div class="page-title"><div><h1>Stock</h1><p>Inventaire de la cafétéria</p></div>
+    <div style="display:flex;gap:8px;"><button class="btn ok" onclick="openStockMove('Entrée')">+ Entrée de stock</button><button class="btn danger" onclick="openStockMove('Sortie')">− Sortie de stock</button></div>
+  </div>
+  <div class="card">
+    <table class="table"><thead><tr><th>Produit</th><th>Quantité</th><th>Seuil minimum</th><th>Statut</th><th>Dernière modification</th></tr></thead>
+    <tbody>${PRODUCTS.map(p=>{
+      const st=stockStatus(p);
+      const badge = st==='rupture'?`<span class="badge fail">🔴 Rupture</span>`:st==='faible'?`<span class="badge pending">🟠 Stock faible</span>`:`<span class="badge ok">🟢 Disponible</span>`;
+      return `<tr><td><div class="name-cell"><span style="font-size:18px;">${p.emoji}</span>${p.name}</div></td><td>${p.stock}</td><td>${p.threshold}</td><td>${badge}</td><td>${p.updated.toLocaleDateString('fr-FR')}</td></tr>`;
+    }).join('')}</tbody></table>
+  </div>
+  <div class="card-head" style="margin:20px 0 8px;"><h3>Historique des mouvements</h3></div>
+  <div class="card">
+    <table class="table"><thead><tr><th>Produit</th><th>Type</th><th>Quantité</th><th>Date</th><th>Note</th></tr></thead>
+    <tbody>${STOCK_MOVEMENTS.slice().sort((a,b)=>b.date-a.date).map(m=>`
+      <tr><td>${m.product}</td><td>${m.type==='Entrée'?`<span class="badge ok">Entrée</span>`:`<span class="badge fail">Sortie</span>`}</td><td>${m.qty}</td><td>${m.date.toLocaleString('fr-FR')}</td><td>${m.note||'—'}</td></tr>
+    `).join('') || `<tr><td colspan="5"><div class="empty">Aucun mouvement</div></td></tr>`}</tbody></table>
+  </div>`;
+}
+function openStockMove(type){
+  openModal(`
+    <button class="close-x" onclick="closeModal()">${icon('x',14)}</button>
+    <h3>${type} de stock</h3>
+    <div class="field"><label>Produit</label><select id="sm-prod">${PRODUCTS.map(p=>`<option value="${p.id}">${p.emoji} ${p.name}</option>`).join('')}</select></div>
+    <div class="field"><label>Quantité</label><input id="sm-qty" type="number" placeholder="0"></div>
+    ${type==='Entrée'?`<div class="field"><label>Fournisseur</label><input id="sm-sup" placeholder="Ex. Boulangerie Centrale"></div><div class="field"><label>Prix d'achat</label><input id="sm-cost" type="number" placeholder="0"></div>`:`<div class="field"><label>Motif</label><input id="sm-reason" placeholder="Ex. Périmé, Vente"></div>`}
+    <div class="field"><label>Note</label><input id="sm-note" placeholder="Optionnel"></div>
+    <button class="btn primary" style="width:100%;" onclick="saveStockMove('${type}')">Enregistrer</button>
+  `);
+}
+async function saveStockMove(type){
+  const pid = document.getElementById('sm-prod').value;
+  const qty = parseInt(document.getElementById('sm-qty').value);
+  const note = document.getElementById('sm-note').value;
+  if(!qty||qty<=0){ toast('Quantité invalide'); return; }
+  const p = PRODUCTS.find(x=>x.id===pid);
+  p.stock += type==='Entrée' ? qty : -qty;
+  if(p.stock<0) p.stock=0;
+  p.updated = new Date();
+  STOCK_MOVEMENTS.unshift({product:p.name, type, qty, date:new Date(), note});
+  await Promise.all([
+    sb.from('cafeteria_products').update({stock:p.stock}).eq('id',p.id),
+    sb.from('stock_movements').insert({product_id:p.id, product_name:p.name, type, qty, note}),
+  ]);
+  closeModal(); renderPage(); toast(type+' enregistrée');
+}
+
+/* ============================================================
+   COMMANDES
+============================================================ */
+let orderFilter='Toutes';
+function orderBoxTable(list){
+  return `<table class="table"><thead><tr><th>Client</th><th>Type</th><th>Produits</th><th>Montant</th><th>Paiement</th><th>Statut</th></tr></thead>
+    <tbody>${list.map(o=>`
+      <tr onclick="openOrderDetail('${o.id}')">
+        <td>${o.client}</td>
+        <td>${o.type==='Élève'?`<span class="badge mut">Élève</span>`:o.type==='Parent'?`<span class="badge" style="background:#E3EEFF;color:#1F5FD6;">Parent</span>`:o.type}</td>
+        <td>${o.items.map(i=>i.qty+'× '+i.name).join(', ')}</td>
+        <td class="tnum">${money(o.total)}</td><td>${o.payment}</td><td>${statusBadge(o.status)}</td>
+      </tr>`).join('')}
+    </tbody></table>`;
+}
+function pgCommandes(){
+  const filters=['Toutes',...ORDER_STATUSES];
+  let list = ORDERS;
+  if(orderFilter!=='Toutes') list = list.filter(o=>o.status===orderFilter);
+  list = list.slice().sort((a,b)=>b.date-a.date);
+
+  const classBoxes = CLASSES.map(c=>({
+    label:c, rows:list.filter(o=>(o.type==='Élève'||o.type==='Parent') && o.classe===c)
+  })).filter(b=>b.rows.length);
+  const profRows = list.filter(o=>o.type==='Professeur');
+  const persoRows = list.filter(o=>o.type==='Personnel');
+
+  return `
+  <div class="page-title"><div><h1>Commandes</h1><p>${list.length} commande(s) — regroupées par classe (élèves + parents), puis par corps</p></div></div>
+  <div class="filter-pills" style="margin-bottom:14px;">${filters.map(f=>`<div class="pill ${orderFilter===f?'active':''}" onclick="orderFilter='${f}';renderPage()">${f}</div>`).join('')}</div>
+
+  ${classBoxes.map(b=>`
+    <div class="card-head" style="margin:18px 0 8px;"><h3>${b.label} <span style="color:var(--muted);font-weight:400;">(${b.rows.length})</span></h3></div>
+    <div class="card">${orderBoxTable(b.rows)}</div>
+  `).join('')}
+
+  ${profRows.length?`
+    <div class="card-head" style="margin:18px 0 8px;"><h3>Professeurs <span style="color:var(--muted);font-weight:400;">(${profRows.length})</span></h3></div>
+    <div class="card">${orderBoxTable(profRows)}</div>`:''}
+
+  ${persoRows.length?`
+    <div class="card-head" style="margin:18px 0 8px;"><h3>Personnel <span style="color:var(--muted);font-weight:400;">(${persoRows.length})</span></h3></div>
+    <div class="card">${orderBoxTable(persoRows)}</div>`:''}
+
+  ${list.length===0?`<div class="card"><div class="empty">Aucune commande</div></div>`:''}
+  `;
+}
+function openOrderDetail(id){
+  const o = ORDERS.find(x=>x.id===id);
+  const canAdvance = !['Servie','Annulée'].includes(o.status);
+  openModal(`
+    <button class="close-x" onclick="closeModal()">${icon('x',14)}</button>
+    <h3>Commande ${o.id}</h3>
+    <div class="summary-row"><span>Client</span><b>${o.client} (${o.type})</b></div>
+    <div class="summary-row"><span>Paiement</span><b>${o.payment}</b></div>
+    <div class="summary-row"><span>Date</span><b>${o.date.toLocaleString('fr-FR')}</b></div>
+    <div class="summary-row"><span>Statut</span><b>${statusBadge(o.status)}</b></div>
+    <div style="margin:14px 0;">
+      ${o.items.map(i=>`<div class="summary-row"><span>${i.qty}× ${i.name}</span><b class="tnum">${money(i.price*i.qty)}</b></div>`).join('')}
+      <div class="summary-row"><span><b>Total</b></span><b class="tnum">${money(o.total)}</b></div>
+    </div>
+    ${canAdvance?`<button class="btn primary" style="width:100%;" onclick="advanceOrder('${o.id}')">Passer à « ${nextStatus(o.status)} »</button>`:''}
+    ${o.status!=='Annulée'&&o.status!=='Servie'?`<button class="btn danger" style="width:100%;margin-top:8px;" onclick="cancelOrder('${o.id}')">Annuler la commande</button>`:''}
+  `);
+}
+async function advanceOrder(id){
+  const o = ORDERS.find(x=>x.id===id);
+  o.status = nextStatus(o.status);
+  const writes = [sb.from('cafeteria_orders').update({status:o.status}).eq('id',id)];
+  if(o.status==='Prête' && o.accountNumber){
+    writes.push(sb.from('notifications').insert({id:genId('N'), account_number:o.accountNumber, text:`Votre commande à la cafétéria (${o.id}) est prête !`, read:false}));
+  }
+  await Promise.all(writes);
+  closeModal(); renderPage(); toast('Statut mis à jour : '+o.status);
+}
+async function cancelOrder(id){
+  const o = ORDERS.find(x=>x.id===id);
+  o.status='Annulée';
+  await sb.from('cafeteria_orders').update({status:'Annulée'}).eq('id',id);
+  closeModal(); renderPage(); toast('Commande annulée');
+}
+
+/* ============================================================
+   PAIEMENTS
+============================================================ */
+function paymentBucket(d){
+  const mins = (Date.now()-d.getTime())/60000;
+  if(mins<5) return "À l'instant";
+  if(d.toDateString()===new Date().toDateString()) return "Aujourd'hui";
+  if(d.toDateString()===new Date(Date.now()-86400000).toDateString()) return 'Hier';
+  return d.toLocaleDateString('fr-FR');
+}
+const PAY_METHOD_ICON = {'School Bank':'wallet','Carte virtuelle':'card','Solde du compte':'receipt'};
+function pgPaiements(){
+  const rows = ORDERS.slice().sort((a,b)=>b.date-a.date);
+  rows.forEach(o=>{ if(!o.txId) o.txId=genId('HB'); });
+  const paid = rows.filter(o=>o.status!=='Annulée');
+  const total = paid.reduce((s,o)=>s+o.total,0);
+  const refunded = rows.filter(o=>o.status==='Annulée').length;
+  const byMethod = {};
+  paid.forEach(o=>{ byMethod[o.payment]=(byMethod[o.payment]||0)+o.total; });
+
+  const groups={};
+  rows.forEach(o=>{ const g=paymentBucket(o.date); (groups[g]=groups[g]||[]).push(o); });
+
+  return `
+  <div class="page-title"><div><h1>Paiements</h1><p>Historique complet des transactions liées aux commandes</p></div></div>
+  <div class="kpi-row">
+    <div class="kpi-card"><p class="kl">${icon('wallet',16)} Total encaissé</p><p class="kv tnum">${money(total)}</p></div>
+    <div class="kpi-card"><p class="kl">${icon('receipt',16)} Transactions</p><p class="kv">${rows.length}</p></div>
+    <div class="kpi-card"><p class="kl">${icon('cart',16)} Remboursées</p><p class="kv" style="color:${refunded?'var(--neg)':'inherit'}">${refunded}</p></div>
+    <div class="kpi-card"><p class="kl">Méthode la + utilisée</p><p class="kv" style="font-size:14px;">${Object.entries(byMethod).sort((a,b)=>b[1]-a[1])[0]?.[0]||'—'}</p></div>
+  </div>
+  ${Object.keys(groups).length===0?`<div class="card"><div class="empty">Aucun paiement</div></div>`:
+  Object.entries(groups).map(([label,list])=>`
+    <div class="card-head" style="margin:18px 0 8px;"><h3 style="font-size:12.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">${label} <span style="text-transform:none;font-weight:400;">(${list.length})</span></h3></div>
+    <div class="card" style="padding:6px 8px;">
+      ${list.map(o=>`
+        <div class="trow" onclick="openPaymentDetail('${o.txId}')">
+          <div class="tx-icn-lite">${icon(PAY_METHOD_ICON[o.payment]||'wallet',17)}</div>
+          <div class="tleft"><b>${o.client}</b><small>${o.txId} · Commande ${o.id} · ${o.payment}</small></div>
+          <div style="text-align:right;">
+            <div class="tnum" style="font-weight:700;font-size:13px;">${money(o.total)}</div>
+            ${o.status==='Annulée'?`<span class="badge fail">⚪ Remboursé</span>`:`<span class="badge ok">🟢 Payé</span>`}
+          </div>
+        </div>`).join('')}
+    </div>`).join('')}`;
+}
+function openPaymentDetail(txId){
+  const o = ORDERS.find(x=>x.txId===txId);
+  if(!o) return;
+  const subtotal = o.items.reduce((s,i)=>s+i.price*i.qty,0);
+  openModal(`
+    <button class="close-x" onclick="closeModal()">${icon('x',14)}</button>
+    <div style="text-align:center;margin-bottom:16px;">
+      <div class="cur-badge-lg">${icon(PAY_METHOD_ICON[o.payment]||'wallet',24)}</div>
+      <h3 style="margin:10px 0 2px;">${money(o.total)}</h3>
+      <p style="margin:0;color:var(--muted);font-size:12px;">${o.status==='Annulée'?'Remboursé':'Payé'} · ${o.date.toLocaleString('fr-FR')}</p>
+    </div>
+    <div class="summary-row"><span>ID transaction</span><b>${o.txId}</b></div>
+    <div class="summary-row"><span>Commande liée</span><b>${o.id}</b></div>
+    <div class="summary-row"><span>Client</span><b>${o.client} (${o.type}${o.classe?' · '+o.classe:''})</b></div>
+    <div class="summary-row"><span>Méthode</span><b>${o.payment}</b></div>
+    <div class="summary-row"><span>Statut commande</span><b>${statusBadge(o.status)}</b></div>
+    <div class="card-head" style="margin:14px 0 6px;"><h3 style="font-size:12.5px;color:var(--muted);text-transform:uppercase;">Détail des articles</h3></div>
+    ${o.items.map(i=>`<div class="summary-row"><span>${i.qty}× ${i.name}</span><b class="tnum">${money(i.price*i.qty)}</b></div>`).join('')}
+    <div class="summary-row"><span>Sous-total</span><b class="tnum">${money(subtotal)}</b></div>
+    <div class="summary-row"><span><b>Total</b></span><b class="tnum">${money(o.total)}</b></div>
+    <button class="btn ghost" style="width:100%;margin-top:14px;" onclick="closeModal();openOrderDetail('${o.id}')">Voir la commande complète</button>
+  `);
+}
+
+/* ============================================================
+   ANALYTICS
+============================================================ */
+function pgAnalytics(){
+  const revenue = ORDERS.filter(o=>o.status!=='Annulée').reduce((s,o)=>s+o.total,0);
+  const sales={}; ORDERS.filter(o=>o.status!=='Annulée').flatMap(o=>o.items).forEach(i=>{sales[i.name]=(sales[i.name]||0)+i.qty;});
+  const sorted = Object.entries(sales).sort((a,b)=>b[1]-a[1]);
+  const byType={}; ORDERS.forEach(o=>{byType[o.type]=(byType[o.type]||0)+1;});
+  return `
+  <div class="page-title"><div><h1>Analytics</h1><p>Ventes, produits et clients de la cafétéria</p></div></div>
+  <div class="kpi-row">
+    <div class="kpi-card"><p class="kl">Revenus (démo)</p><p class="kv tnum">${money(revenue)}</p></div>
+    <div class="kpi-card"><p class="kl">Produits les + vendus</p><p class="kv" style="font-size:14px;">${sorted[0]?sorted[0][0]:'—'}</p></div>
+    <div class="kpi-card"><p class="kl">Produits les - vendus</p><p class="kv" style="font-size:14px;">${sorted[sorted.length-1]?sorted[sorted.length-1][0]:'—'}</p></div>
+    <div class="kpi-card"><p class="kl">Types de clients actifs</p><p class="kv">${Object.keys(byType).length}</p></div>
+  </div>
+  <div class="card"><div class="card-head"><h3>Ventes <span style="color:var(--pos);font-size:11px;">● en direct</span></h3></div><canvas id="an-sales-chart" height="150"></canvas></div>
+  <div class="grid-2">
+    <div class="card"><div class="card-head"><h3>Ventes par produit</h3></div><canvas id="an-prod-chart" height="130"></canvas></div>
+    <div class="card"><div class="card-head"><h3>Commandes par type de client</h3></div><canvas id="an-client-chart" height="130"></canvas></div>
+  </div>`;
+}
+
+/* ============================================================
+   NOTIFICATIONS
+============================================================ */
+function pgNotifications(){
+  const list = stockNotifications();
+  return `
+  <div class="page-title"><div><h1>Notifications</h1><p>Alertes de stock uniquement</p></div><button class="btn ghost" onclick="markAllRead()">Tout marquer lu</button></div>
+  <div class="card">
+    ${list.map(n=>`
+      <div class="trow" style="cursor:default;">
+        <div class="tleft"><b>📦 Stock${!n.read?' 🔵':''}</b><small>${n.text}</small></div>
+        <div style="text-align:right;color:var(--muted);font-size:11px;">${n.date.toLocaleString('fr-FR')}</div>
+      </div>`).join('') || `<div class="empty">Aucune alerte de stock — tout est disponible.</div>`}
+  </div>`;
+}
+function markAllRead(){ PRODUCTS.forEach(p=>readStockAlerts.add(p.id)); renderPage(); }
+
+/* ============================================================
+   PARAMÈTRES
+============================================================ */
+function pgParametres(){
+  return `
+  <div class="page-title"><div><h1>Paramètres</h1><p>Configuration de la cafétéria</p></div></div>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-head"><h3>Cafétéria</h3></div>
+      <div class="field"><label>Nom</label><input id="st-nom" value="${SETTINGS.nom}"></div>
+      <div class="field"><label>Horaires</label><input id="st-horaires" value="${SETTINGS.horaires}"></div>
+      <div class="field"><label>Jours d'ouverture</label><input id="st-jours" value="${SETTINGS.jours}"></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h3>Commandes</h3></div>
+      <div class="field"><label>Temps de préparation moyen (minutes)</label><input id="st-preptime" type="number" value="${SETTINGS.prepTime}"></div>
+      <div class="field"><label>Devise</label><input value="Dollar Humanisme (HUMA)" disabled></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h3>Méthodes de paiement acceptées</h3></div>
+    <div class="settings-row"><div class="st">School Bank<small>Paiement direct depuis le solde du compte</small></div><button class="toggle ${SETTINGS.methods.schoolbank?'on':''}" onclick="toggleMethod('schoolbank')"></button></div>
+    <div class="settings-row"><div class="st">Carte virtuelle<small>Carte créée depuis "index"</small></div><button class="toggle ${SETTINGS.methods.carte?'on':''}" onclick="toggleMethod('carte')"></button></div>
+    <div class="settings-row"><div class="st">Solde du compte scolaire<small>Débit direct autorisé</small></div><button class="toggle ${SETTINGS.methods.solde?'on':''}" onclick="toggleMethod('solde')"></button></div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h3>Notifications</h3></div>
+    <div class="settings-row"><div class="st">Notifications push<small>Nouvelles commandes, alertes</small></div><button class="toggle ${SETTINGS.notifPush?'on':''}" onclick="toggleNotifSetting('notifPush')"></button></div>
+    <div class="settings-row"><div class="st">Alertes de stock<small>Stock faible, rupture</small></div><button class="toggle ${SETTINGS.notifStock?'on':''}" onclick="toggleNotifSetting('notifStock')"></button></div>
+  </div>
+  <button class="btn primary" style="width:100%;margin-top:16px;" onclick="saveCafSettings()">Enregistrer les paramètres</button>`;
+}
+function toggleMethod(k){ SETTINGS.methods[k]=!SETTINGS.methods[k]; renderPage(); sb.from('app_settings').update({value:SETTINGS}).eq('key','cafeteria'); }
+function toggleNotifSetting(k){ SETTINGS[k]=!SETTINGS[k]; renderPage(); sb.from('app_settings').update({value:SETTINGS}).eq('key','cafeteria'); }
+async function saveCafSettings(){
+  SETTINGS.nom = document.getElementById('st-nom').value.trim() || SETTINGS.nom;
+  SETTINGS.horaires = document.getElementById('st-horaires').value.trim();
+  SETTINGS.jours = document.getElementById('st-jours').value.trim();
+  SETTINGS.prepTime = parseInt(document.getElementById('st-preptime').value)||15;
+  await sb.from('app_settings').update({value:SETTINGS, updated_at:new Date().toISOString()}).eq('key','cafeteria');
+  toast('Paramètres enregistrés');
+}
+
+/* ============================================================
+   MODAL (identique au dashboard admin)
+============================================================ */
+function openModal(html){
+  document.getElementById('modal-root').innerHTML = `<div class="modal-bg open" onclick="if(event.target===this)closeModal()"><div class="modal-box" style="position:relative;">${html}</div></div>`;
+}
+function closeModal(){ document.getElementById('modal-root').innerHTML=''; }
+
+/* ============================================================
+   CHARTS — moteur canvas maison (aucune dépendance externe)
+============================================================ */
+function pushSeries(){
+  const last = state.financeSeries[state.financeSeries.length-1];
+  let next = last + (Math.random()*10-5);
+  next = Math.max(8,Math.min(55,next));
+  state.financeSeries.push(next);
+  if(state.financeSeries.length>28) state.financeSeries.shift();
+  if(state.displaySeries.length<state.financeSeries.length) state.displaySeries.push(next);
+}
+const CHART_HEIGHTS = {'sales-chart':150,'an-sales-chart':150,'an-prod-chart':130,'an-client-chart':130};
+function setupCanvas(cv){
+  const w = Math.min(Math.max(cv.parentElement.clientWidth||300, 60), window.innerWidth-20);
+  const h = CHART_HEIGHTS[cv.id] || 110;
+  const dpr = window.devicePixelRatio||1;
+  cv.width = w*dpr; cv.height = h*dpr;
+  cv.style.width = w+'px'; cv.style.height = h+'px';
+  const ctx = cv.getContext('2d');
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  return {ctx,w,h};
+}
+function drawLineFlux(id,data,color,fillColor){
+  const cv = document.getElementById(id);
+  if(!cv) return;
+  const {ctx,w,h} = setupCanvas(cv);
+  ctx.clearRect(0,0,w,h);
+  const min=Math.min(...data), max=Math.max(...data), pad=8;
+  const range=(max-min)||1;
+  const stepX=(w-pad*2)/(data.length-1);
+  const pts = data.map((v,i)=>[pad+i*stepX, h-pad-((v-min)/range)*(h-pad*2)]);
+  ctx.beginPath(); ctx.moveTo(pts[0][0],pts[0][1]);
+  for(let i=1;i<pts.length;i++){ const [x0,y0]=pts[i-1],[x1,y1]=pts[i]; const mx=(x0+x1)/2; ctx.bezierCurveTo(mx,y0,mx,y1,x1,y1); }
+  ctx.lineTo(pts[pts.length-1][0],h); ctx.lineTo(pts[0][0],h); ctx.closePath();
+  ctx.fillStyle=fillColor; ctx.fill();
+  ctx.beginPath(); ctx.moveTo(pts[0][0],pts[0][1]);
+  for(let i=1;i<pts.length;i++){ const [x0,y0]=pts[i-1],[x1,y1]=pts[i]; const mx=(x0+x1)/2; ctx.bezierCurveTo(mx,y0,mx,y1,x1,y1); }
+  ctx.strokeStyle=color; ctx.lineWidth=3; ctx.lineJoin='round'; ctx.lineCap='round'; ctx.stroke();
+  const last=pts[pts.length-1];
+  ctx.beginPath(); ctx.arc(last[0],last[1],4,0,Math.PI*2); ctx.fillStyle=color; ctx.fill();
+}
+function drawBarChart(id,labels,data,color){
+  const cv = document.getElementById(id);
+  if(!cv) return;
+  const {ctx,w,h} = setupCanvas(cv);
+  ctx.clearRect(0,0,w,h);
+  if(data.length===0) return;
+  const max = Math.max(...data)||1, pad=6, gap=8;
+  const bw = (w-pad*2-gap*(data.length-1))/data.length;
+  ctx.font='10px Inter, sans-serif'; ctx.textAlign='center';
+  data.forEach((v,i)=>{
+    const bh=(v/max)*(h-26);
+    const x=pad+i*(bw+gap), y=h-20-bh;
+    ctx.fillStyle=color;
+    ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x,y,bw,bh,4) : ctx.rect(x,y,bw,bh); ctx.fill();
+    ctx.fillStyle='#647096';
+    ctx.fillText((labels[i]||'').slice(0,8), x+bw/2, h-6);
+  });
+}
+function drawCharts(){
+  drawLineFlux('sales-chart', state.displaySeries, '#0A1B3D', 'rgba(10,27,61,.15)');
+  drawLineFlux('an-sales-chart', state.displaySeries, '#0A1B3D', 'rgba(10,27,61,.15)');
+  const sales={}; ORDERS.filter(o=>o.status!=='Annulée').flatMap(o=>o.items).forEach(i=>{sales[i.name]=(sales[i.name]||0)+i.qty;});
+  drawBarChart('an-prod-chart', Object.keys(sales), Object.values(sales), '#0A1B3D');
+  const byType={}; ORDERS.forEach(o=>{byType[o.type]=(byType[o.type]||0)+1;});
+  drawBarChart('an-client-chart', Object.keys(byType), Object.values(byType), '#2748A0');
+}
+function ensureTicker(){
+  if(ticker) return;
+  ticker = setInterval(pushSeries, 1500);
+  function frame(){
+    for(let i=0;i<state.financeSeries.length;i++){
+      const target = state.financeSeries[i];
+      const cur = state.displaySeries[i] ?? target;
+      state.displaySeries[i] = cur + (target-cur)*0.06;
+    }
+    while(state.displaySeries.length>state.financeSeries.length) state.displaySeries.shift();
+    drawLineFlux('sales-chart', state.displaySeries, '#0A1B3D', 'rgba(10,27,61,.15)');
+    drawLineFlux('an-sales-chart', state.displaySeries, '#0A1B3D', 'rgba(10,27,61,.15)');
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+</script>
+</body>
+</html>
