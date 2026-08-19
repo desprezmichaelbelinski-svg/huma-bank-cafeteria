@@ -152,14 +152,11 @@ button{font-family:inherit;cursor:pointer;}
 </head>
 <body>
 <div id="gate">
-  <div class="gate-card">
+  <div class="gate-card" id="gate-card">
     <div class="mark">🍽</div>
     <h1>Cafétéria — Administration</h1>
     <p>Gestion du menu, du stock et des commandes</p>
-    <input id="gate-pass" type="password" placeholder="Mot de passe administrateur">
-    <div id="gate-err" class="gate-err" style="display:none;">Mot de passe incorrect.</div>
-    <button onclick="gateLogin()">Accéder au dashboard</button>
-    <div class="gate-hint">Démo : mot de passe <b>admin123</b><br>Ce dashboard est un prototype autonome. Les commandes payées depuis "index" transitent par School Bank — la cafétéria ne reçoit que les infos nécessaires à la préparation.</div>
+    <div id="gate-body">Chargement…</div>
   </div>
 </div>
 <div id="app"></div>
@@ -228,6 +225,9 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 let PRODUCTS = [];
 let STOCK_MOVEMENTS = [];
 let ORDERS = [];
+let DAILY_MENU = []; // [{id, weekday, productId}]
+const WEEKDAY_NAMES = {1:'Lundi',2:'Mardi',3:'Mercredi',4:'Jeudi',5:'Vendredi'};
+function todayWeekday(){ const d=new Date().getDay(); return d>=1&&d<=5 ? d : null; } // 0=dim,6=sam -> null (pas école)
 function stockStatus(p){ if(p.stock<=0) return 'rupture'; if(p.stock<=p.threshold) return 'faible'; return 'ok'; }
 
 const ORDER_STATUSES = ['En attente','Payée','En préparation','Prête','Servie','Annulée'];
@@ -235,15 +235,17 @@ function nextStatus(s){ const i=ORDER_STATUSES.indexOf(s); return i>=0 && i<4 ? 
 const CLASSES = ['7e Année Fondamentale','8e Année Fondamentale','9e Année Fondamentale','Secondaire I (NS1)','Secondaire II (NS2)','Secondaire III (NS3)','Secondaire IV — Philo'];
 
 async function loadFromSupabase(){
-  const [prodRes, orderRes, moveRes, setRes] = await Promise.all([
+  const [prodRes, orderRes, moveRes, setRes, menuRes] = await Promise.all([
     sb.from('cafeteria_products').select('*').order('name'),
     sb.from('cafeteria_orders').select('*').order('created_at',{ascending:false}),
     sb.from('stock_movements').select('*').order('created_at',{ascending:false}),
     sb.from('app_settings').select('*').eq('key','cafeteria').maybeSingle(),
+    sb.from('daily_menu').select('*').order('weekday'),
   ]);
   PRODUCTS = (prodRes.data||[]).map(p=>({id:p.id, name:p.name, emoji:p.emoji, category:p.category, price:Number(p.price), stock:p.stock, threshold:p.threshold, status:p.status, updated:new Date(p.updated_at)}));
-  ORDERS = (orderRes.data||[]).map(o=>({id:o.id, txId:o.tx_id, accountNumber:o.account_number, client:o.client_name, type:o.client_type, classe:o.classe, items:o.items||[], total:Number(o.total), payment:o.payment, status:o.status, date:new Date(o.created_at)}));
+  ORDERS = (orderRes.data||[]).map(o=>({id:o.id, txId:o.tx_id, proofCode:o.proof_code, accountNumber:o.account_number, client:o.client_name, type:o.client_type, classe:o.classe, items:o.items||[], total:Number(o.total), payment:o.payment, status:o.status, date:new Date(o.created_at)}));
   STOCK_MOVEMENTS = (moveRes.data||[]).map(m=>({product:m.product_name, type:m.type, qty:m.qty, date:new Date(m.created_at), supplier:m.supplier, note:m.note}));
+  DAILY_MENU = (menuRes.data||[]).map(m=>({id:m.id, weekday:m.weekday, productId:m.product_id}));
   if(setRes.data && setRes.data.value){ Object.assign(SETTINGS, setRes.data.value); }
 }
 async function syncAll(){ await loadFromSupabase(); if(document.getElementById('gate').style.display==='none') renderPage(); }
@@ -252,6 +254,7 @@ function startRealtime(){
     .on('postgres_changes', {event:'*', schema:'public', table:'cafeteria_products'}, syncAll)
     .on('postgres_changes', {event:'*', schema:'public', table:'cafeteria_orders'}, syncAll)
     .on('postgres_changes', {event:'*', schema:'public', table:'stock_movements'}, syncAll)
+    .on('postgres_changes', {event:'*', schema:'public', table:'daily_menu'}, syncAll)
     .subscribe();
 }
 
@@ -284,22 +287,77 @@ let ticker = null;
 /* ============================================================
    GATE
 ============================================================ */
+let currentAdmin = null;
+async function boot(){
+  const { data: admins } = await sb.from('cafeteria_admins').select('*').order('created_at');
+  if(!admins || admins.length===0){ renderGateCreate(); }
+  else { renderGateLogin(admins); }
+}
+function renderGateCreate(){
+  document.getElementById('gate-body').innerHTML = `
+    <p style="color:#A9B8E4;font-size:12px;margin:-6px 0 18px;">Aucun administrateur n'existe encore — créez le premier compte.</p>
+    <div class="field" style="text-align:left;"><label style="color:#A9B8E4;">Nom</label><input id="ga-nom" placeholder="Nom"></div>
+    <div class="field" style="text-align:left;"><label style="color:#A9B8E4;">Prénom</label><input id="ga-prenom" placeholder="Prénom"></div>
+    <div class="field" style="text-align:left;"><label style="color:#A9B8E4;">Genre</label>
+      <select id="ga-genre" style="width:100%;padding:13px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.07);color:#fff;font-size:14px;">
+        <option value="Homme">Homme</option><option value="Femme">Femme</option>
+      </select>
+    </div>
+    <input id="ga-pass" type="password" placeholder="Mot de passe">
+    <div id="gate-err" class="gate-err" style="display:none;">Tous les champs sont requis.</div>
+    <button onclick="createAdmin()">Créer le compte administrateur</button>
+  `;
+}
+async function createAdmin(){
+  const nom=document.getElementById('ga-nom').value.trim();
+  const prenom=document.getElementById('ga-prenom').value.trim();
+  const genre=document.getElementById('ga-genre').value;
+  const pass=document.getElementById('ga-pass').value;
+  if(!nom||!prenom||!pass){ document.getElementById('gate-err').style.display='block'; return; }
+  const id = genId('ADM');
+  await sb.from('cafeteria_admins').insert({id,nom,prenom,genre,password:pass});
+  currentAdmin = {id,nom,prenom,genre};
+  enterApp();
+}
+function renderGateLogin(admins){
+  document.getElementById('gate-body').innerHTML = `
+    <div class="field" style="text-align:left;"><label style="color:#A9B8E4;">Administrateur</label>
+      <select id="ga-select" style="width:100%;padding:13px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.07);color:#fff;font-size:14px;">
+        ${admins.map(a=>`<option value="${a.id}">${a.prenom} ${a.nom}</option>`).join('')}
+      </select>
+    </div>
+    <input id="gate-pass" type="password" placeholder="Mot de passe">
+    <div id="gate-err" class="gate-err" style="display:none;">Mot de passe incorrect.</div>
+    <button onclick="gateLogin()">Accéder au dashboard</button>
+    <div class="gate-hint">Les commandes payées depuis "index" transitent par School Bank — la cafétéria ne reçoit que les infos nécessaires à la préparation.</div>
+  `;
+  window._admins = admins;
+}
 async function gateLogin(){
-  const v = document.getElementById('gate-pass').value;
-  if(v!=='admin123'){ document.getElementById('gate-err').style.display='block'; return; }
+  const id = document.getElementById('ga-select').value;
+  const pass = document.getElementById('gate-pass').value;
+  const admin = window._admins.find(a=>a.id===id);
+  if(!admin || admin.password!==pass){ document.getElementById('gate-err').style.display='block'; return; }
+  currentAdmin = admin;
+  enterApp();
+}
+async function enterApp(){
   document.getElementById('gate').style.display='none';
   document.getElementById('app').innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100vh;color:var(--muted);">Chargement des données…</div>`;
   try{ await loadFromSupabase(); }catch(e){ console.error('Supabase load failed',e); }
   renderApp();
   startRealtime();
 }
+boot();
+
 
 /* ============================================================
    SHELL
 ============================================================ */
 const NAV = [
   ['dashboard','home','Dashboard'],
-  ['menu','food','Menu'],
+  ['menujour','food','Menu du jour'],
+  ['menu','food','Catalogue'],
   ['stock','box','Stock'],
   ['commandes','cart','Commandes'],
   ['paiements','receipt','Paiements'],
@@ -343,7 +401,7 @@ function renderApp(){
 function go(page){ state.page=page; renderApp(); }
 function renderPage(){
   const c = document.getElementById('content');
-  const pages = {dashboard:pgDashboard,menu:pgMenu,stock:pgStock,commandes:pgCommandes,paiements:pgPaiements,analytics:pgAnalytics,notifications:pgNotifications,parametres:pgParametres};
+  const pages = {dashboard:pgDashboard,menujour:pgMenuJour,menu:pgMenu,stock:pgStock,commandes:pgCommandes,paiements:pgPaiements,analytics:pgAnalytics,notifications:pgNotifications,parametres:pgParametres};
   c.innerHTML = (pages[state.page]||pgDashboard)();
   requestAnimationFrame(()=>{ drawCharts(); ensureTicker(); });
 }
@@ -406,6 +464,48 @@ function statusBadge(s){
 /* ============================================================
    MENU
 ============================================================ */
+/* ============================================================
+   MENU DU JOUR — menu hebdomadaire fixe (Lundi à Vendredi)
+============================================================ */
+let menuJourDay = todayWeekday() || 1;
+function pgMenuJour(){
+  const dayItems = DAILY_MENU.filter(m=>m.weekday===menuJourDay).map(m=>PRODUCTS.find(p=>p.id===m.productId)).filter(Boolean);
+  const today = todayWeekday();
+  return `
+  <div class="page-title"><div><h1>Menu du jour</h1><p>Programmez le menu fixe de chaque jour d'école — il ne change pas d'une semaine à l'autre</p></div></div>
+  ${today ? `<div class="notif-banner" style="margin-bottom:14px;"><div class="ic">${icon('check',18)}</div><p>Nous sommes <b>${WEEKDAY_NAMES[today]}</b> — c'est ce menu que "index" affiche en ce moment aux élèves.</p></div>` : `<div class="notif-banner" style="margin-bottom:14px;"><div class="ic">${icon('alert',18)}</div><p>Nous sommes en week-end — aucun menu actif côté élèves aujourd'hui.</p></div>`}
+  <div class="filter-pills" style="margin-bottom:16px;">${[1,2,3,4,5].map(d=>`<div class="pill ${menuJourDay===d?'active':''} ${today===d?'':''}" onclick="menuJourDay=${d};renderPage()">${WEEKDAY_NAMES[d]}${today===d?' •':''}</div>`).join('')}</div>
+  <div class="card">
+    <div class="card-head"><h3>${WEEKDAY_NAMES[menuJourDay]} — ${dayItems.length} article(s) au menu</h3></div>
+    <table class="table"><thead><tr><th>Produit</th><th>Catégorie</th><th>Prix</th><th>Action</th></tr></thead>
+    <tbody>${dayItems.map(p=>`
+      <tr><td><div class="name-cell"><span style="font-size:18px;">${p.emoji}</span>${p.name}</div></td><td>${p.category}</td><td class="tnum">${money(p.price)}</td>
+      <td><button class="btn danger" onclick="removeFromDailyMenu('${p.id}')">Retirer</button></td></tr>
+    `).join('') || `<tr><td colspan="4"><div class="empty">Aucun article programmé pour ${WEEKDAY_NAMES[menuJourDay]}</div></td></tr>`}</tbody></table>
+  </div>
+  <div class="card-head" style="margin:20px 0 8px;"><h3>Ajouter au menu de ${WEEKDAY_NAMES[menuJourDay]}</h3></div>
+  <div class="card">
+    <table class="table"><thead><tr><th>Produit</th><th>Catégorie</th><th>Prix</th><th>Action</th></tr></thead>
+    <tbody>${PRODUCTS.filter(p=>!dayItems.some(d=>d.id===p.id)).map(p=>`
+      <tr><td><div class="name-cell"><span style="font-size:18px;">${p.emoji}</span>${p.name}</div></td><td>${p.category}</td><td class="tnum">${money(p.price)}</td>
+      <td><button class="btn ok" onclick="addToDailyMenu('${p.id}')">+ Ajouter</button></td></tr>
+    `).join('') || `<tr><td colspan="4"><div class="empty">Tous les produits sont déjà au menu de ce jour</div></td></tr>`}</tbody></table>
+  </div>`;
+}
+async function addToDailyMenu(productId){
+  const id = genId('DM');
+  await sb.from('daily_menu').insert({id, weekday:menuJourDay, product_id:productId});
+  DAILY_MENU.push({id, weekday:menuJourDay, productId});
+  renderPage(); toast('Ajouté au menu de '+WEEKDAY_NAMES[menuJourDay]);
+}
+async function removeFromDailyMenu(productId){
+  const entry = DAILY_MENU.find(m=>m.weekday===menuJourDay && m.productId===productId);
+  if(!entry) return;
+  await sb.from('daily_menu').delete().eq('id',entry.id);
+  DAILY_MENU = DAILY_MENU.filter(m=>m.id!==entry.id);
+  renderPage(); toast('Retiré du menu');
+}
+
 let menuFilter='Tous';
 function pgMenu(){
   const filters=['Tous',...CATEGORIES];
@@ -572,7 +672,11 @@ function openOrderDetail(id){
   const canAdvance = !['Servie','Annulée'].includes(o.status);
   openModal(`
     <button class="close-x" onclick="closeModal()">${icon('x',14)}</button>
-    <h3>Commande ${o.id}</h3>
+    <h3>Commande</h3>
+    <div style="text-align:center;background:var(--navy-50);border-radius:14px;padding:14px;margin-bottom:14px;">
+      <p style="margin:0 0 4px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;">Code de preuve — à demander à l'acheteur</p>
+      <p style="margin:0;font-family:'Manrope';font-weight:800;font-size:28px;letter-spacing:6px;">${o.proofCode||'----'}</p>
+    </div>
     <div class="summary-row"><span>Client</span><b>${o.client} (${o.type})</b></div>
     <div class="summary-row"><span>Paiement</span><b>${o.payment}</b></div>
     <div class="summary-row"><span>Date</span><b>${o.date.toLocaleString('fr-FR')}</b></div>
