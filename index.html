@@ -141,20 +141,18 @@ button{font-family:inherit;cursor:pointer;}
 .settings-row .st{font-size:13px;font-weight:600;}
 .settings-row small{display:block;color:var(--muted);font-weight:400;font-size:11px;margin-top:2px;}
 
-/* DIDACTICIEL — tutoriel de bienvenue */
-#didacticiel{position:fixed;inset:0;z-index:998;background:radial-gradient(120% 100% at 50% 0%,var(--navy-700) 0%,var(--navy-900) 55%,var(--navy-950) 100%);display:flex;align-items:center;justify-content:center;padding:20px;}
-#didacticiel.hidden{display:none;}
-.tuto-card{width:100%;max-width:420px;color:#fff;text-align:center;}
-.tuto-card .ti{width:64px;height:64px;border-radius:50%;background:rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;color:#fff;}
-.tuto-card h2{font-family:'Manrope';font-weight:800;font-size:21px;margin:0 0 10px;}
-.tuto-card p{color:#B9C6EE;font-size:13.5px;line-height:1.7;margin:0 0 26px;}
-.tuto-dots{display:flex;justify-content:center;gap:6px;margin-bottom:22px;}
-.tuto-dots span{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.25);}
-.tuto-dots span.on{background:#fff;width:20px;border-radius:5px;transition:.2s;}
-.tuto-actions{display:flex;gap:10px;}
-.tuto-actions button{flex:1;padding:14px;border-radius:14px;font-weight:700;font-size:13.5px;border:none;}
-.tuto-skip{background:rgba(255,255,255,.08);color:#B9C6EE;}
-.tuto-next{background:#fff;color:var(--navy-900);}
+/* TOUR GUIDÉ — bulles avec flèches pointant sur les vrais éléments */
+.tour-target-highlight{position:relative;z-index:997;box-shadow:0 0 0 4px var(--surface), 0 0 0 6px var(--navy-600), 0 0 0 9999px rgba(4,11,24,.62);border-radius:14px;}
+.tour-bubble{position:fixed;z-index:999;background:var(--surface);color:var(--ink);border-radius:16px;padding:15px 16px;width:270px;max-width:calc(100vw - 24px);box-shadow:0 20px 40px -10px rgba(0,0,0,.4);}
+.tour-bubble h4{margin:0 0 5px;font-size:13.5px;font-weight:800;font-family:'Manrope';}
+.tour-bubble p{margin:0;font-size:12.5px;line-height:1.55;color:var(--muted);}
+.tour-bubble .tour-foot{display:flex;justify-content:space-between;align-items:center;margin-top:12px;}
+.tour-bubble .tour-count{font-size:10.5px;color:var(--muted-2);font-weight:700;}
+.tour-bubble .tour-btns{display:flex;gap:12px;}
+.tour-bubble button{border:none;background:none;font-size:12px;font-weight:700;cursor:pointer;padding:0;}
+.tour-skip-btn{color:var(--muted);}
+.tour-next-btn{color:var(--navy-700);}
+.tour-arrow{position:absolute;width:13px;height:13px;background:var(--surface);transform:rotate(45deg);}
 
 @media (max-width:980px){
   .sidebar{width:76px;}
@@ -175,7 +173,7 @@ button{font-family:inherit;cursor:pointer;}
   </div>
 </div>
 <div id="app"></div>
-<div id="didacticiel" class="hidden"></div>
+<div id="tour-root"></div>
 <div id="modal-root"></div>
 <div id="toast" class="toast"></div>
 
@@ -363,7 +361,7 @@ async function enterApp(){
   try{ await loadFromSupabase(); }catch(e){ console.error('Supabase load failed',e); }
   renderApp();
   startRealtime();
-  try{ if(!localStorage.getItem('huma_cafe_tuto_seen')) showTutoriel(); }catch(e){}
+  try{ if(!localStorage.getItem('huma_cafe_tour_seen')) setTimeout(()=>startTour(TOUR_CAFE,'huma_cafe_tour_seen'),600); }catch(e){}
 }
 boot();
 
@@ -864,7 +862,7 @@ function pgParametres(){
     <div class="settings-row"><div class="st">Notifications push<small>Nouvelles commandes, alertes</small></div><button class="toggle ${SETTINGS.notifPush?'on':''}" onclick="toggleNotifSetting('notifPush')"></button></div>
     <div class="settings-row"><div class="st">Alertes de stock<small>Stock faible, rupture</small></div><button class="toggle ${SETTINGS.notifStock?'on':''}" onclick="toggleNotifSetting('notifStock')"></button></div>
   </div>
-  <button class="btn ghost" style="width:100%;margin-top:14px;" onclick="showTutoriel()">Revoir le didacticiel</button>
+  <button class="btn ghost" style="width:100%;margin-top:14px;" onclick="startTour(TOUR_CAFE,'huma_cafe_tour_seen')">Revoir le tour guidé</button>
   <button class="btn primary" style="width:100%;margin-top:10px;" onclick="saveCafSettings()">Enregistrer les paramètres</button>`;
 }
 function toggleMethod(k){ SETTINGS.methods[k]=!SETTINGS.methods[k]; renderPage(); sb.from('app_settings').update({value:SETTINGS}).eq('key','cafeteria'); }
@@ -945,46 +943,73 @@ function pgDictionnaire(){
 }
 
 /* ============================================================
-   DIDACTICIEL — tutoriel de bienvenue de l'admin Cafétéria
+   TOUR GUIDÉ — bulles avec flèches pointant sur le menu latéral
 ============================================================ */
-const TUTO_CAFE = [
-  {icon:'food', titre:"Bienvenue dans l'admin Cafétéria", texte:"Voici le centre de gestion de la cafétéria scolaire. Ce court guide vous montre l'essentiel."},
-  {icon:'food', titre:'Menu du jour', texte:"Programmez ici le menu fixe de chacun des 5 jours d'école — il ne change pas d'une semaine à l'autre."},
-  {icon:'food', titre:'Catalogue', texte:"Gérez la liste complète de vos produits : ajout, modification, activation/désactivation."},
-  {icon:'box', titre:'Stock', texte:"Suivez les quantités disponibles et enregistrez chaque entrée ou sortie de stock."},
-  {icon:'cart', titre:'Commandes', texte:"Suivez chaque commande par statut, regroupées par classe. Faites-les avancer jusqu'à « Servie »."},
-  {icon:'check', titre:'Code de preuve', texte:"Chaque commande a un code à 4 chiffres. Demandez-le à l'acheteur pour vérifier que sa commande est réelle."},
-  {icon:'receipt', titre:'Paiements', texte:"Consultez l'historique complet des transactions liées aux commandes de la cafétéria."},
-  {icon:'search', titre:'Dictionnaire', texte:"Retrouvez à tout moment la définition de tout terme utilisé dans les 3 applications HUMA BANK."},
+const TOUR_CAFE = [
+  {before:()=>go('menujour'), selector:"[onclick=\"go('menujour')\"]", placement:'right', titre:'Menu du jour', texte:"Programmez ici le menu fixe de chacun des 5 jours d'école — il ne change pas d'une semaine à l'autre."},
+  {before:()=>go('menu'), selector:"[onclick=\"go('menu')\"]", placement:'right', titre:'Catalogue', texte:"Gérez la liste complète de vos produits : ajout, modification, activation/désactivation."},
+  {before:()=>go('stock'), selector:"[onclick=\"go('stock')\"]", placement:'right', titre:'Stock', texte:"Suivez les quantités disponibles et enregistrez chaque entrée ou sortie de stock."},
+  {before:()=>go('commandes'), selector:"[onclick=\"go('commandes')\"]", placement:'right', titre:'Commandes', texte:"Suivez chaque commande par statut, regroupées par classe, jusqu'à « Servie »."},
+  {before:()=>go('paiements'), selector:"[onclick=\"go('paiements')\"]", placement:'right', titre:'Paiements', texte:"Consultez l'historique complet des transactions liées aux commandes."},
+  {before:()=>go('dictionnaire'), selector:"[onclick=\"go('dictionnaire')\"]", placement:'right', titre:'Dictionnaire', texte:"Retrouvez à tout moment la définition de tout terme utilisé dans les 3 applications HUMA BANK."},
 ];
-let tutoStep = 0;
-function showTutoriel(){
-  tutoStep = 0;
-  document.getElementById('didacticiel').classList.remove('hidden');
-  renderTutoStep();
+let tourSteps = [], tourIdx = 0, tourStorageKey = '';
+function startTour(steps, storageKey){
+  tourSteps = steps; tourIdx = 0; tourStorageKey = storageKey;
+  runTourStep();
 }
-function renderTutoStep(){
-  const s = TUTO_CAFE[tutoStep];
-  const isLast = tutoStep === TUTO_CAFE.length-1;
-  document.getElementById('didacticiel').innerHTML = `
-    <div class="tuto-card">
-      <div class="ti">${icon(s.icon,28)}</div>
-      <h2>${s.titre}</h2>
-      <p>${s.texte}</p>
-      <div class="tuto-dots">${TUTO_CAFE.map((_,i)=>`<span class="${i===tutoStep?'on':''}"></span>`).join('')}</div>
-      <div class="tuto-actions">
-        <button class="tuto-skip" onclick="closeTutoriel()">Passer</button>
-        <button class="tuto-next" onclick="tutoNext()">${isLast?'Terminé':'Suivant'}</button>
+function runTourStep(){
+  clearTourHighlight();
+  const step = tourSteps[tourIdx];
+  if(!step){ endTour(); return; }
+  if(step.before) step.before();
+  requestAnimationFrame(()=>setTimeout(()=>{
+    const el = document.querySelector(step.selector);
+    if(!el){ tourIdx++; runTourStep(); return; }
+    el.scrollIntoView({block:'center', behavior:'smooth'});
+    setTimeout(()=>positionTourBubble(el, step),280);
+  },60));
+}
+function positionTourBubble(el, step){
+  el.classList.add('tour-target-highlight');
+  const rect = el.getBoundingClientRect();
+  const root = document.getElementById('tour-root');
+  const isLast = tourIdx === tourSteps.length-1;
+  root.innerHTML = `<div class="tour-bubble" id="tour-bubble">
+      <h4>${step.titre}</h4>
+      <p>${step.texte}</p>
+      <div class="tour-foot">
+        <span class="tour-count">${tourIdx+1}/${tourSteps.length}</span>
+        <div class="tour-btns">
+          <button class="tour-skip-btn" onclick="endTour()">Passer</button>
+          <button class="tour-next-btn" onclick="nextTourStep()">${isLast?'Terminé':'Suivant →'}</button>
+        </div>
       </div>
+      <div class="tour-arrow" id="tour-arrow"></div>
     </div>`;
+  const bubble = document.getElementById('tour-bubble');
+  const bw = bubble.offsetWidth, bh = bubble.offsetHeight, margin = 14;
+  const placement = step.placement || 'bottom';
+  let top, left;
+  if(placement==='bottom'){ top = rect.bottom+margin; left = rect.left+rect.width/2-bw/2; }
+  else if(placement==='top'){ top = rect.top-bh-margin; left = rect.left+rect.width/2-bw/2; }
+  else if(placement==='right'){ top = rect.top+rect.height/2-bh/2; left = rect.right+margin; }
+  else { top = rect.top+rect.height/2-bh/2; left = rect.left-bw-margin; }
+  left = Math.max(10, Math.min(left, window.innerWidth-bw-10));
+  top = Math.max(10, Math.min(top, window.innerHeight-bh-10));
+  bubble.style.top = top+'px'; bubble.style.left = left+'px';
+  const arrow = document.getElementById('tour-arrow');
+  if(placement==='bottom'){ arrow.style.top='-6px'; arrow.style.left=Math.max(12,Math.min(rect.left+rect.width/2-left-6,bw-24))+'px'; }
+  else if(placement==='top'){ arrow.style.bottom='-6px'; arrow.style.left=Math.max(12,Math.min(rect.left+rect.width/2-left-6,bw-24))+'px'; }
+  else if(placement==='right'){ arrow.style.left='-6px'; arrow.style.top=(bh/2-6)+'px'; }
+  else { arrow.style.right='-6px'; arrow.style.top=(bh/2-6)+'px'; }
 }
-function tutoNext(){
-  if(tutoStep < TUTO_CAFE.length-1){ tutoStep++; renderTutoStep(); }
-  else closeTutoriel();
-}
-function closeTutoriel(){
-  document.getElementById('didacticiel').classList.add('hidden');
-  try{ localStorage.setItem('huma_cafe_tuto_seen','1'); }catch(e){}
+function nextTourStep(){ tourIdx++; runTourStep(); }
+function clearTourHighlight(){ document.querySelectorAll('.tour-target-highlight').forEach(e=>e.classList.remove('tour-target-highlight')); }
+function endTour(){
+  clearTourHighlight();
+  document.getElementById('tour-root').innerHTML='';
+  try{ localStorage.setItem(tourStorageKey,'1'); }catch(e){}
 }
 
 
