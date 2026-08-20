@@ -251,8 +251,8 @@ const CLASSES = ['7e Année Fondamentale','8e Année Fondamentale','9e Année Fo
 async function loadFromSupabase(){
   const [prodRes, orderRes, moveRes, setRes, menuRes] = await Promise.all([
     sb.from('cafeteria_products').select('*').order('name'),
-    sb.from('cafeteria_orders').select('*').order('created_at',{ascending:false}),
-    sb.from('stock_movements').select('*').order('created_at',{ascending:false}),
+    sb.from('cafeteria_orders').select('*').order('created_at',{ascending:false}).limit(300),
+    sb.from('stock_movements').select('*').order('created_at',{ascending:false}).limit(150),
     sb.from('app_settings').select('*').eq('key','cafeteria').maybeSingle(),
     sb.from('daily_menu').select('*').order('weekday'),
   ]);
