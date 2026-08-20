@@ -240,8 +240,8 @@ let PRODUCTS = [];
 let STOCK_MOVEMENTS = [];
 let ORDERS = [];
 let DAILY_MENU = []; // [{id, weekday, productId}]
-const WEEKDAY_NAMES = {1:'Lundi',2:'Mardi',3:'Mercredi',4:'Jeudi',5:'Vendredi',6:'Samedi'};
-function todayWeekday(){ const d=new Date().getDay(); return d>=1&&d<=6 ? d : null; } // 0=dim -> null (pas école)
+const WEEKDAY_NAMES = {1:'Lundi',2:'Mardi',3:'Mercredi',4:'Jeudi',5:'Vendredi'};
+function todayWeekday(){ const d=new Date().getDay(); return d>=1&&d<=5 ? d : null; } // 0=dim,6=sam -> null (pas école)
 function stockStatus(p){ if(p.stock<=0) return 'rupture'; if(p.stock<=p.threshold) return 'faible'; return 'ok'; }
 
 const ORDER_STATUSES = ['En attente','Payée','En préparation','Prête','Servie','Annulée'];
@@ -372,6 +372,7 @@ boot();
 const NAV = [
   ['dashboard','home','Dashboard'],
   ['menujour','food','Menu du jour'],
+  ['semaine','chart','Semaine complète'],
   ['menu','food','Catalogue'],
   ['stock','box','Stock'],
   ['commandes','cart','Commandes'],
@@ -416,7 +417,7 @@ function renderApp(){
 function go(page){ state.page=page; renderApp(); }
 function renderPage(){
   const c = document.getElementById('content');
-  const pages = {dashboard:pgDashboard,menujour:pgMenuJour,menu:pgMenu,stock:pgStock,commandes:pgCommandes,paiements:pgPaiements,analytics:pgAnalytics,notifications:pgNotifications,parametres:pgParametres};
+  const pages = {dashboard:pgDashboard,menujour:pgMenuJour,semaine:pgSemaine,menu:pgMenu,stock:pgStock,commandes:pgCommandes,paiements:pgPaiements,analytics:pgAnalytics,notifications:pgNotifications,parametres:pgParametres};
   c.innerHTML = (pages[state.page]||pgDashboard)();
   requestAnimationFrame(()=>{ drawCharts(); ensureTicker(); });
 }
@@ -489,7 +490,7 @@ function pgMenuJour(){
   return `
   <div class="page-title"><div><h1>Menu du jour</h1><p>Programmez le menu fixe de chaque jour d'école — il ne change pas d'une semaine à l'autre</p></div></div>
   ${today ? `<div class="notif-banner" style="margin-bottom:14px;"><div class="ic">${icon('check',18)}</div><p>Nous sommes <b>${WEEKDAY_NAMES[today]}</b> — c'est ce menu que "index" affiche en ce moment aux élèves.</p></div>` : `<div class="notif-banner" style="margin-bottom:14px;"><div class="ic">${icon('alert',18)}</div><p>Nous sommes en week-end — aucun menu actif côté élèves aujourd'hui.</p></div>`}
-  <div class="filter-pills" style="margin-bottom:16px;">${[1,2,3,4,5,6].map(d=>`<div class="pill ${menuJourDay===d?'active':''} ${today===d?'':''}" onclick="menuJourDay=${d};renderPage()">${WEEKDAY_NAMES[d]}${today===d?' •':''}</div>`).join('')}</div>
+  <div class="filter-pills" style="margin-bottom:16px;">${[1,2,3,4,5].map(d=>`<div class="pill ${menuJourDay===d?'active':''} ${today===d?'':''}" onclick="menuJourDay=${d};renderPage()">${WEEKDAY_NAMES[d]}${today===d?' •':''}</div>`).join('')}</div>
   <div class="card">
     <div class="card-head"><h3>${WEEKDAY_NAMES[menuJourDay]} — ${dayItems.length} article(s) au menu</h3></div>
     <table class="table"><thead><tr><th>Produit</th><th>Catégorie</th><th>Prix</th><th>Action</th></tr></thead>
@@ -507,18 +508,55 @@ function pgMenuJour(){
     `).join('') || `<tr><td colspan="4"><div class="empty">Tous les produits sont déjà au menu de ce jour</div></td></tr>`}</tbody></table>
   </div>`;
 }
-async function addToDailyMenu(productId){
+async function addToDailyMenu(productId, day){
+  const weekday = day||menuJourDay;
   const id = genId('DM');
-  await sb.from('daily_menu').insert({id, weekday:menuJourDay, product_id:productId});
-  DAILY_MENU.push({id, weekday:menuJourDay, productId});
-  renderPage(); toast('Ajouté au menu de '+WEEKDAY_NAMES[menuJourDay]);
+  await sb.from('daily_menu').insert({id, weekday, product_id:productId});
+  DAILY_MENU.push({id, weekday, productId});
+  renderPage(); toast('Ajouté au menu de '+WEEKDAY_NAMES[weekday]);
 }
-async function removeFromDailyMenu(productId){
-  const entry = DAILY_MENU.find(m=>m.weekday===menuJourDay && m.productId===productId);
+async function removeFromDailyMenu(productId, day){
+  const weekday = day||menuJourDay;
+  const entry = DAILY_MENU.find(m=>m.weekday===weekday && m.productId===productId);
   if(!entry) return;
   await sb.from('daily_menu').delete().eq('id',entry.id);
   DAILY_MENU = DAILY_MENU.filter(m=>m.id!==entry.id);
   renderPage(); toast('Retiré du menu');
+}
+
+/* ============================================================
+   SEMAINE COMPLÈTE — régler Lundi à Vendredi en une seule page
+   (l'admin peut préparer toute la semaine dès le dimanche ;
+   chaque jour, le bon menu s'affiche automatiquement côté élèves
+   sans aucune intervention humaine — voir todayWeekday())
+============================================================ */
+function pgSemaine(){
+  const today = todayWeekday();
+  return `
+  <div class="page-title"><div><h1>Semaine complète</h1><p>Programmez les 5 jours d'école en une seule fois — utile pour préparer toute la semaine à l'avance, même un dimanche</p></div></div>
+  <div class="notif-banner" style="margin-bottom:16px;"><div class="ic">${icon('check',18)}</div><p>Le système est automatique : chaque jour, "index" affiche seul le menu du jour correspondant, sans aucune action de votre part. ${today?`Aujourd'hui c'est <b>${WEEKDAY_NAMES[today]}</b>.`:"Nous sommes en week-end — aucun jour actif côté élèves."}</p></div>
+  ${[1,2,3,4,5].map(d=>{
+    const dayItems = DAILY_MENU.filter(m=>m.weekday===d).map(m=>PRODUCTS.find(p=>p.id===m.productId)).filter(Boolean);
+    const available = PRODUCTS.filter(p=>!dayItems.some(x=>x.id===p.id));
+    return `
+    <div class="card-head" style="margin:18px 0 8px;"><h3>${WEEKDAY_NAMES[d]}${today===d?" <span class=\"badge ok\">Aujourd'hui</span>":''} <span style="color:var(--muted);font-weight:400;">(${dayItems.length} article${dayItems.length>1?'s':''})</span></h3></div>
+    <div class="card">
+      ${dayItems.length ? dayItems.map(p=>`
+        <div class="trow">
+          <div class="tx-icn-lite">${p.emoji||'🍽'}</div>
+          <div class="tleft"><b>${p.name}</b><small>${p.category} · ${money(p.price)}</small></div>
+          <button class="btn danger" onclick="removeFromDailyMenu('${p.id}',${d})">Retirer</button>
+        </div>`).join('') : `<div class="empty">Aucun article programmé pour ${WEEKDAY_NAMES[d]}</div>`}
+      ${available.length ? `
+      <div style="display:flex;gap:8px;margin-top:${dayItems.length?'12px':'0'};padding-top:${dayItems.length?'12px':'0'};border-top:${dayItems.length?'1px solid var(--line)':'none'};">
+        <select id="sem-sel-${d}" style="flex:1;border:1px solid var(--line);border-radius:10px;padding:9px 12px;font-size:13px;">
+          ${available.map(p=>`<option value="${p.id}">${p.emoji} ${p.name} — ${money(p.price)}</option>`).join('')}
+        </select>
+        <button class="btn ok" onclick="addToDailyMenu(document.getElementById('sem-sel-${d}').value,${d})">+ Ajouter</button>
+      </div>` : ''}
+    </div>`;
+  }).join('')}
+  `;
 }
 
 let menuFilter='Tous';
@@ -887,6 +925,8 @@ const TOUR_CAFE = [
   {before:()=>go('menujour'), selector:".notif-banner", placement:'bottom', titre:'Jour détecté automatiquement', texte:"L'application sait quel jour on est et affiche aux élèves le menu correspondant, en direct."},
   {selector:".filter-pills", placement:'bottom', titre:'Choisir un jour', texte:"Sélectionnez Lundi à Vendredi pour programmer le menu fixe de ce jour."},
   {selector:".card", placement:'top', titre:'Menu programmé', texte:"Retirez un plat du jour, ou ajoutez-en un depuis la liste du dessous — le menu ne change plus une fois programmé."},
+  /* SEMAINE COMPLÈTE */
+  {before:()=>go('semaine'), selector:".notif-banner", placement:'bottom', titre:'Semaine complète', texte:"Préparez les 5 jours d'école en une seule page — même un dimanche, à l'avance. Chaque jour change tout seul, sans aucune action de votre part."},
   /* CATALOGUE */
   {before:()=>go('menu'), selector:"[onclick=\"openProductForm()\"]", placement:'bottom', titre:'Ajouter un produit', texte:"Créez un nouveau plat, snack, boisson ou dessert avec son prix et son stock initial."},
   {selector:".subnav", placement:'bottom', titre:'Filtrer par catégorie', texte:"Parcourez votre catalogue par catégorie : Plats, Snacks, Boissons, Desserts, Fruits, Combos."},
