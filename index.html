@@ -240,8 +240,8 @@ let PRODUCTS = [];
 let STOCK_MOVEMENTS = [];
 let ORDERS = [];
 let DAILY_MENU = []; // [{id, weekday, productId}]
-const WEEKDAY_NAMES = {1:'Lundi',2:'Mardi',3:'Mercredi',4:'Jeudi',5:'Vendredi'};
-function todayWeekday(){ const d=new Date().getDay(); return d>=1&&d<=5 ? d : null; } // 0=dim,6=sam -> null (pas école)
+const WEEKDAY_NAMES = {1:'Lundi',2:'Mardi',3:'Mercredi',4:'Jeudi',5:'Vendredi',6:'Samedi'};
+function todayWeekday(){ const d=new Date().getDay(); return d>=1&&d<=6 ? d : null; } // 0=dim -> null (pas école)
 function stockStatus(p){ if(p.stock<=0) return 'rupture'; if(p.stock<=p.threshold) return 'faible'; return 'ok'; }
 
 const ORDER_STATUSES = ['En attente','Payée','En préparation','Prête','Servie','Annulée'];
@@ -489,7 +489,7 @@ function pgMenuJour(){
   return `
   <div class="page-title"><div><h1>Menu du jour</h1><p>Programmez le menu fixe de chaque jour d'école — il ne change pas d'une semaine à l'autre</p></div></div>
   ${today ? `<div class="notif-banner" style="margin-bottom:14px;"><div class="ic">${icon('check',18)}</div><p>Nous sommes <b>${WEEKDAY_NAMES[today]}</b> — c'est ce menu que "index" affiche en ce moment aux élèves.</p></div>` : `<div class="notif-banner" style="margin-bottom:14px;"><div class="ic">${icon('alert',18)}</div><p>Nous sommes en week-end — aucun menu actif côté élèves aujourd'hui.</p></div>`}
-  <div class="filter-pills" style="margin-bottom:16px;">${[1,2,3,4,5].map(d=>`<div class="pill ${menuJourDay===d?'active':''} ${today===d?'':''}" onclick="menuJourDay=${d};renderPage()">${WEEKDAY_NAMES[d]}${today===d?' •':''}</div>`).join('')}</div>
+  <div class="filter-pills" style="margin-bottom:16px;">${[1,2,3,4,5,6].map(d=>`<div class="pill ${menuJourDay===d?'active':''} ${today===d?'':''}" onclick="menuJourDay=${d};renderPage()">${WEEKDAY_NAMES[d]}${today===d?' •':''}</div>`).join('')}</div>
   <div class="card">
     <div class="card-head"><h3>${WEEKDAY_NAMES[menuJourDay]} — ${dayItems.length} article(s) au menu</h3></div>
     <table class="table"><thead><tr><th>Produit</th><th>Catégorie</th><th>Prix</th><th>Action</th></tr></thead>
